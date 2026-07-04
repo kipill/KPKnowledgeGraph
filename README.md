@@ -100,7 +100,7 @@ args = ["-X", "utf8", ".claude/kg/tools/kg_mcp_server.py"]
 | [DESIGN.md](./DESIGN.md) | 理解为什么这样设计、决策依据（ADR）、什么不做 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 实际去用、扩展、维护——schema、MCP 工具、工作流、发版流程 |
 | [templates/](./templates) | 拿现成模板填自己项目（graph 主索引 / 域文件 / entry MD） |
-| [examples/](./examples) | 真实例子（中性化的系统） |
+| [examples/](./examples) | 真实例子（中性化的系统，含 [graph_view.html](./examples/graph_view.html) 可视化 demo） |
 | [tools/](./tools) | kg_core 核心库、MCP server、hook、升级器、校验/可视化 CLI |
 | [skills/kg-consult.skill.md](./skills/kg-consult.skill.md) | Claude skill 定义（决定 AI 何时自动查图谱） |
 | [kg-init.md](./kg-init.md) | `/kg-init` 命令（AI 扫代码生成初始骨架） |

@@ -107,7 +107,7 @@ nobody willing to maintain (governance prevents "writing it wrong", not "nobody 
 | [DESIGN.md](./DESIGN.md) | Understand why it's designed this way, the decisions (ADRs), what it deliberately doesn't do |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | Actually use, extend, and maintain it — schema, MCP tools, workflows, release process |
 | [templates/](../../templates) | Grab ready-made templates for your project (main index / domain file / entry MD) |
-| [examples/](../../examples) | Real examples (neutralized systems) |
+| [examples/](../../examples) | Real examples (neutralized; includes a [graph_view.html](../../examples/graph_view.html) viz demo) |
 | [tools/](../../tools) | kg_core library, MCP server, hook, upgrader, validate/viz CLI |
 | [skills/kg-consult.skill.md](../../skills/kg-consult.skill.md) | Claude skill definition (decides when the AI auto-checks the graph) |
 | [kg-init.md](../../kg-init.md) | The `/kg-init` command (AI scans code to generate the initial skeleton) |

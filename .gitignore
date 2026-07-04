@@ -11,6 +11,7 @@ reverse_index.json
 changelog.jsonl
 querylog.jsonl
 graph_view.html
+!examples/graph_view.html
 
 # 系统
 .DS_Store
