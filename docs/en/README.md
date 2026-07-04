@@ -17,6 +17,18 @@ files, possibly writing code on wrong assumptions. Token consumption differs by 
 impact is frequently missed. Traditional wikis are too large, low-density, and drift the moment
 maintenance lapses.
 
+KPKnowledgeGraph is a **development-experience knowledge graph for small-to-medium projects**.
+Traditional code-level knowledge graphs (ASTs, call graphs, class diagrams) tell the AI what the code
+*looks like*, but not *how this project should be changed*. The truly expensive knowledge — which
+fields must be saved to DB after mutation, where the cross-server boundary is, which systems must be
+updated together during a refactor, the conventions newcomers trip over — usually lives only in the
+lead developer's head or scattered code comments.
+
+It copies that **project-specific development experience** to the AI, instead of relying on the user
+to remind the AI via prompts every time or making the AI analyze the codebase from scratch. The AI
+stops being a black box that relies solely on its generic memory and gradually becomes a **replica of
+the core developer**: the more actively you maintain it, the better it understands your project.
+
 KPKnowledgeGraph gives the AI **navigation**, not an encyclopedia: where a system is, what a change
 touches, what the traps are. Crucially, it has a **governance mechanism** that guarantees what gets
 written in is correct and traceable — so it doesn't rot over time.
@@ -120,6 +132,8 @@ nobody willing to maintain (governance prevents "writing it wrong", not "nobody 
 - **Fill on demand, not up front**: add an entry when you touch that system; unfilled is the normal state
 - **Code is the source of truth**: the graph is just an accelerator; when a path drifts, fix it顺手 against the real code
 - **Make it "used", not "complete"**: prune with querylog data; don't chase completeness
+- **The AI is a replica of the developer, not just its own memory**: encode project-specific conventions, pitfalls, and cross-module links in the graph so the AI inherits that experience instead of re-analyzing code every time
+- **Active maintenance makes it smarter**: the graph won't complete itself, but every `kg_verify_edge`, every `kg_add_pitfall`, and every `kg_feedback` makes it closer to your project and your habits
 
 See [DESIGN.md](./DESIGN.md) for details.
 
