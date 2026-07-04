@@ -6,6 +6,15 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.2 - 2026-07-04
+
+- Visualization UI improvements:
+  - Edge context tooltip is now a custom floating box (larger font, dark background, follows
+    the mouse) instead of the tiny 9px cytoscape label.
+  - Clicking a draft edge opens a custom modal confirmation dialog instead of browser-native
+    `prompt`/`alert`, showing from→to, context, a reason input, and confirm/cancel buttons.
+    Supports ESC and clicking the backdrop to close.
+
 ## 2.3.1 - 2026-07-04
 
 - `gen_graph_html.py --serve` adds `--idle-timeout` (default 1800s = 30min). Server auto-stops

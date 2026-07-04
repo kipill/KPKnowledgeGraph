@@ -178,6 +178,29 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
 .ci{font-size:11px;color:#58a6ff;padding:2px 0;font-family:monospace;word-break:break-all}
 .ci.sub{color:#8b949e}
 .hint{font-size:11px;color:#8b949e;line-height:1.5;margin-top:8px;padding:6px 8px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
+/* 边关系描述 tooltip */
+.edge-tooltip{position:fixed;z-index:1200;display:none;max-width:360px;background:rgba(22,27,34,0.96);border:1px solid #30363d;border-radius:8px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none;font-size:14px;line-height:1.5;color:#c9d1d9}
+.edge-tooltip .et-title{font-weight:700;margin-bottom:6px;color:#58a6ff;font-size:13px}
+.edge-tooltip .et-ctx{margin-bottom:6px;word-break:break-word}
+.edge-tooltip .et-conf{font-size:12px;font-weight:600}
+.edge-tooltip .et-conf.verified{color:#2ea043}
+.edge-tooltip .et-conf.draft{color:#d29922}
+/* draft 边验证 modal */
+.modal-overlay{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+.modal-box{width:420px;max-width:92vw;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;box-shadow:0 12px 32px rgba(0,0,0,.55)}
+.modal-title{font-size:18px;font-weight:700;color:#58a6ff;margin-bottom:14px}
+.modal-body p{margin-bottom:10px;font-size:14px;color:#c9d1d9}
+.modal-body .vm-ctx{color:#8b949e;font-size:13px;line-height:1.5;padding:8px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
+.modal-body label{display:block;margin:14px 0 6px;font-size:13px;color:#8b949e}
+.modal-body input{width:100%;padding:9px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+.modal-body input:focus{outline:none;border-color:#58a6ff}
+.vm-error{display:none;color:#f85149;font-size:13px;margin-top:10px;padding:8px;background:rgba(248,81,73,.1);border-radius:6px}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.modal-actions button{padding:8px 16px;border-radius:6px;border:1px solid #30363d;cursor:pointer;font-size:13px}
+.modal-actions .btn-secondary{background:#21262d;color:#c9d1d9}
+.modal-actions .btn-secondary:hover{background:#30363d}
+.modal-actions .btn-primary{background:#238636;color:#fff;border-color:#238636}
+.modal-actions .btn-primary:hover{background:#2ea043}
 </style>
 </head>
 <body>
@@ -262,12 +285,30 @@ function render(D){
   });
 
   // Edge tooltip on hover
+  const edgeTip = document.getElementById('edge-tooltip');
+  const etFrom = document.getElementById('et-from');
+  const etTo = document.getElementById('et-to');
+  const etCtx = document.getElementById('et-ctx');
+  const etConf = document.getElementById('et-conf');
   cy.on('mouseover','edge',function(e){
-    const ctx=e.target.data('context');
-    if(ctx) e.target.style({'label':ctx,'font-size':'9px','color':'#c9d1d9','text-background-color':'#161b22','text-background-opacity':1,'text-background-padding':'3px'});
+    const d = e.target.data();
+    if(!d.context) return;
+    etFrom.textContent = d.source;
+    etTo.textContent = d.target;
+    etCtx.textContent = d.context;
+    etConf.textContent = d.confidence === 'verified' ? 'verified（已验证）' : 'draft（待验证）';
+    etConf.className = 'et-conf ' + (d.confidence === 'verified' ? 'verified' : 'draft');
+    edgeTip.style.display = 'block';
+  });
+  cy.on('mousemove','edge',function(e){
+    const ev = e.originalEvent;
+    if(ev){
+      edgeTip.style.left = (ev.clientX + 14) + 'px';
+      edgeTip.style.top = (ev.clientY + 14) + 'px';
+    }
   });
   cy.on('mouseout','edge',function(e){
-    e.target.style({'label':'','text-background-opacity':0});
+    edgeTip.style.display = 'none';
   });
 
   // Node click → detail panel
@@ -352,25 +393,91 @@ function loadData(){
   return fetch('/api/data').then(r=>r.json()).then(render);
 }
 
+// Verify modal（draft 边点击验证）
+let pendingVerify = null;
+const verifyModal = document.getElementById('verify-modal');
+const vmFrom = document.getElementById('vm-from');
+const vmTo = document.getElementById('vm-to');
+const vmCtx = document.getElementById('vm-ctx');
+const vmReason = document.getElementById('vm-reason');
+const vmError = document.getElementById('vm-error');
+
+function openVerifyModal(d){
+  pendingVerify = {source: d.source, target: d.target};
+  vmFrom.textContent = d.source;
+  vmTo.textContent = d.target;
+  vmCtx.textContent = d.context || '';
+  vmReason.value = '通过可视化页面标记为已验证';
+  vmError.textContent = '';
+  vmError.style.display = 'none';
+  verifyModal.style.display = 'flex';
+  setTimeout(()=>vmReason.focus(), 0);
+}
+
+function closeVerifyModal(){
+  pendingVerify = null;
+  verifyModal.style.display = 'none';
+}
+
+function submitVerify(){
+  if(!pendingVerify) return;
+  const reason = vmReason.value.trim();
+  if(!reason){
+    vmError.textContent = '原因不能为空';
+    vmError.style.display = 'block';
+    return;
+  }
+  vmError.style.display = 'none';
+  fetch('/api/verify_edge',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({from_id:pendingVerify.source,to_id:pendingVerify.target,reason:reason})})
+    .then(r=>r.json())
+    .then(j=>{
+      if(j.ok){ closeVerifyModal(); loadData(); }
+      else { vmError.textContent = j.error || '标记失败'; vmError.style.display = 'block'; }
+    })
+    .catch(err=>{ vmError.textContent = '请求失败：'+err; vmError.style.display = 'block'; });
+}
+
+verifyModal.addEventListener('click',function(e){ if(e.target===verifyModal) closeVerifyModal(); });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeVerifyModal(); });
+
 // 点 draft 边 → 标记已验证（写操作走 /api/verify_edge → kg_core.verify_edge）
 function onEdgeTap(e){
   const d=e.target.data();
   if(d.confidence!=='draft') return;  // 只 draft 边可标记
-  const label=d.source+' → '+d.target;
-  const reason=prompt('标记为已验证：\n'+label+'\n\n原因（写入 changelog，可编辑后确认）：','通过可视化页面标记为已验证');
-  if(reason===null) return;  // 用户取消
-  fetch('/api/verify_edge',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({from_id:d.source,to_id:d.target,reason:reason})})
-    .then(r=>r.json())
-    .then(j=>{
-      if(j.ok){ loadData(); }  // 全图刷新（reverse_index/stats 已变）
-      else { alert('标记失败：\n'+j.error); }
-    })
-    .catch(err=>alert('请求失败：'+err));
+  openVerifyModal(d);
 }
 
 __BOOTSTRAP__
 </script>
+
+<!-- 边关系描述 tooltip -->
+<div id="edge-tooltip" class="edge-tooltip" style="display:none">
+  <div class="et-title"><span id="et-from"></span> → <span id="et-to"></span></div>
+  <div class="et-ctx" id="et-ctx"></div>
+  <div class="et-conf" id="et-conf"></div>
+</div>
+
+<!-- draft 边验证 modal -->
+<div id="verify-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">验证关联</div>
+    <div class="modal-body">
+      <p><strong id="vm-from"></strong> → <strong id="vm-to"></strong></p>
+      <p class="vm-ctx" id="vm-ctx"></p>
+      <label for="vm-reason">原因（写入 changelog，必填）：</label>
+      <input type="text" id="vm-reason" value="通过可视化页面标记为已验证" />
+      <div class="vm-error" id="vm-error"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeVerifyModal()">取消</button>
+      <button class="btn-primary" onclick="submitVerify()">标记为已验证</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>"""
 

@@ -5,6 +5,12 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.2 — 2026-07-04
+
+- 可视化页面 UI 改进：
+  - 边关系描述改成**自定义 tooltip**（更大字体、深色背景、跟随鼠标），替代原来 cytoscape 自带的 9px 小标签。
+  - 点击 draft 边验证时，用**自定义 modal 确认框**替代浏览器原生 `prompt`/`alert`，显示 from→to、context、reason 输入框、确认/取消按钮，支持 ESC / 点击遮罩关闭。
+
 ## 2.3.1 — 2026-07-04
 
 - `gen_graph_html.py --serve` 加 `--idle-timeout` 参数（默认 1800 秒 = 30 分钟），无请求自动停止，防止 skill 或 AI 意外退出后 server 残留。
