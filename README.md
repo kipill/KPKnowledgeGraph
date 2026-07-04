@@ -1,5 +1,8 @@
 # KPKnowledgeGraph
 
+**中文** | [English](./docs/en/README.md)
+
+
 > 一份成长型的知识图谱 —— 让 AI 编程助手**先查图谱再读代码**。
 
 为 AI 编程助手（Claude Code / Codex 等）优化的项目知识图谱。用 **MD 做"字典"**、
@@ -102,6 +105,7 @@ args = ["-X", "utf8", ".claude/kg/tools/kg_mcp_server.py"]
 | [skills/kg-consult.skill.md](./skills/kg-consult.skill.md) | Claude skill 定义（决定 AI 何时自动查图谱） |
 | [kg-init.md](./kg-init.md) | `/kg-init` 命令（AI 扫代码生成初始骨架） |
 | [CHANGELOG.md](./CHANGELOG.md) | 版本变更记录 |
+| [docs/en/](./docs/en/) | English documentation (README / DESIGN / DEVELOPMENT / CHANGELOG) |
 
 ## 设计理念
 

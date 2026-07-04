@@ -1,5 +1,7 @@
 # 变更日志
 
+**中文** | [English](./docs/en/CHANGELOG.md)
+
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 

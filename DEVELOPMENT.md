@@ -1,5 +1,7 @@
 # 开发文档 (Development Guide)
 
+**中文** | [English](./docs/en/DEVELOPMENT.md)
+
 实操向：怎么搭、怎么用、怎么维护。设计原理看 [`DESIGN.md`](./DESIGN.md)。
 
 > v2 核心变化：图谱 JSON 的读写走 **kg MCP 工具**（唯一出入口），不再直接编辑文件。

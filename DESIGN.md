@@ -1,5 +1,7 @@
 # 设计文档 (Design Document)
 
+**中文** | [English](./docs/en/DESIGN.md)
+
 本文档说明这套知识图谱系统**为什么这样设计**，以及关键决策的依据。如果你想直接动手用，看 [`DEVELOPMENT.md`](./DEVELOPMENT.md)。
 
 > v2 变更：新增**治理层**（MCP 唯一出入口 + 写入强校验 + 审计日志 + 防绕行 hook）。
