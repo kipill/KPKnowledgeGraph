@@ -72,6 +72,62 @@ idempotent, never overwrites existing config. Restart your Claude Code session, 
 The AI scans the project structure → lists candidate core systems (you confirm) → groups domains →
 generates the graph skeleton entirely through MCP tools (all `draft`) → auto-validates.
 
+## Quick start
+
+### 1. Initialize (one-time)
+
+After installing, restart Claude Code and run:
+
+```
+/kg-init
+```
+
+The AI scans the project → lists candidate systems (you confirm) → groups domains → generates the
+graph skeleton through MCP tools (all `draft`) → auto-validates.
+
+### 2. Fill conventions and pitfalls (80% of the value)
+
+The skeleton is just a table of contents. Spend the next 2–4 hours on each core system:
+
+- Dictate or review commit logs and have the AI write persistence pitfalls via `kg_add_pitfall`
+- Upgrade confirmed `related` edges from `draft` to `verified` with `kg_verify_edge`
+
+This experience is the core value of the graph — governance prevents "writing it wrong", but not
+"nobody writing".
+
+### 3. Daily use
+
+When working on a new feature, the AI auto-triggers the `kg-consult` skill:
+
+1. `kg_query` keyword search for relevant entries
+2. `kg_catalog` semantic fallback if keywords miss
+3. `kg_get_entry` for details (code paths, pitfalls, outgoing/incoming edges)
+4. View code directly, skipping blind greps
+5. After finishing, the AI suggests `kg_verify_edge` / `kg_add_pitfall`; you just yes/no
+
+### 4. Visualize
+
+```bash
+# Export a self-contained static HTML (shareable, offline)
+python -X utf8 .claude/kg/tools/gen_graph_html.py
+
+# Start a live local server (real-time data, click draft edges to verify)
+python -X utf8 .claude/kg/tools/gen_graph_html.py --serve
+```
+
+### 5. Validate and upgrade
+
+```bash
+# Validate graph integrity
+python -X utf8 .claude/kg/tools/validate.py
+
+# Check for and pull the latest release (tool layer only; graph data untouched)
+python .claude/kg/tools/kg_admin.py check
+python .claude/kg/tools/kg_admin.py update
+```
+
+For full usage, schema, and MCP tool details see [DEVELOPMENT.md](./DEVELOPMENT.md).
+
 ## Version updates (`claude update` style)
 
 Every installed project ships an upgrader that checks the remote for the latest version and upgrades

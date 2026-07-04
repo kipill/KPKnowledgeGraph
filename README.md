@@ -65,6 +65,60 @@ installer 会创建 `<项目>/.claude/kg/`（图谱目录 + 工具）、skill、
 AI 会扫描项目结构 → 列候选核心系统（你确认）→ 划分域 → 全程通过 MCP 工具生成图谱骨架
 （全 `draft`）→ 自动校验。
 
+## 快速开始
+
+### 1. 初始化（一次性）
+
+安装后重启 Claude Code，运行：
+
+```
+/kg-init
+```
+
+AI 扫描项目 → 列候选系统（你确认）→ 划分域 → 通过 MCP 工具生成图谱骨架（全 `draft`）→ 自动校验。
+
+### 2. 补"约定和踩坑"（价值的 80%）
+
+骨架只是目录。接下来 2–4 小时，对每个核心系统：
+
+- 口述或翻 commit log，让 AI 用 `kg_add_pitfall` 写入持久化踩坑
+- 把确定的 `related` 边用 `kg_verify_edge` 从 `draft` 升为 `verified`
+
+这些经验是图谱价值的核心——治理层防得住"写错"，但防不住"没人写"。
+
+### 3. 日常使用
+
+开发新需求时，AI 会自动触发 `kg-consult` skill：
+
+1. `kg_query` 关键词搜索相关 entry
+2. 没命中就 `kg_catalog` 语义兜底
+3. `kg_get_entry` 取详情（含代码路径、踩坑、出边/入边）
+4. 直接 view 代码，跳过盲目 grep
+5. 完成后 AI 会建议 `kg_verify_edge` / `kg_add_pitfall`，你 yes/no 即可
+
+### 4. 可视化查看
+
+```bash
+# 导出静态 HTML（自包含、可分享）
+python -X utf8 .claude/kg/tools/gen_graph_html.py
+
+# 启动动态本地 server（实时数据、点 draft 边可验证）
+python -X utf8 .claude/kg/tools/gen_graph_html.py --serve
+```
+
+### 5. 校验与升级
+
+```bash
+# 校验图谱完整性
+python -X utf8 .claude/kg/tools/validate.py
+
+# 检查并拉取最新版（只换工具层，图谱数据不动）
+python .claude/kg/tools/kg_admin.py check
+python .claude/kg/tools/kg_admin.py update
+```
+
+详细用法、schema、MCP 工具说明见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+
 ## 版本更新（`claude update` 式）
 
 已装项目自带升级器，一条命令查远端最新版并就地升级。**只换工具层，图谱数据分毫不动。**
