@@ -239,6 +239,36 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
   </div>
   <div id="cy-wrap"><div id="cy"></div></div>
 </div>
+
+<!-- 统一浮动提示框 -->
+<div id="tt" class="kg-tooltip">
+  <div class="tt-hd"><span id="tt-from"></span><span class="tt-arrow">→</span><span id="tt-to"></span></div>
+  <div class="tt-body" id="tt-body"></div>
+  <div class="tt-meta">
+    <span class="tt-tag" id="tt-tag1"></span>
+    <span class="tt-tag domain" id="tt-tag2"></span>
+    <span class="tt-tag type" id="tt-tag3"></span>
+  </div>
+</div>
+
+<!-- draft 边验证 modal -->
+<div id="verify-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">验证关联</div>
+    <div class="modal-body">
+      <p><strong id="vm-from"></strong> → <strong id="vm-to"></strong></p>
+      <p class="vm-ctx" id="vm-ctx"></p>
+      <label for="vm-reason">原因（写入 changelog，必填）：</label>
+      <input type="text" id="vm-reason" value="通过可视化页面标记为已验证" />
+      <div class="vm-error" id="vm-error"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeVerifyModal()">取消</button>
+      <button class="btn-primary" onclick="submitVerify()">标记为已验证</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let cy=null;
 let active=null;
@@ -506,35 +536,6 @@ function onEdgeTap(e){
 
 __BOOTSTRAP__
 </script>
-
-<!-- 统一浮动提示框 -->
-<div id="tt" class="kg-tooltip">
-  <div class="tt-hd"><span id="tt-from"></span><span class="tt-arrow">→</span><span id="tt-to"></span></div>
-  <div class="tt-body" id="tt-body"></div>
-  <div class="tt-meta">
-    <span class="tt-tag" id="tt-tag1"></span>
-    <span class="tt-tag domain" id="tt-tag2"></span>
-    <span class="tt-tag type" id="tt-tag3"></span>
-  </div>
-</div>
-
-<!-- draft 边验证 modal -->
-<div id="verify-modal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <div class="modal-title">验证关联</div>
-    <div class="modal-body">
-      <p><strong id="vm-from"></strong> → <strong id="vm-to"></strong></p>
-      <p class="vm-ctx" id="vm-ctx"></p>
-      <label for="vm-reason">原因（写入 changelog，必填）：</label>
-      <input type="text" id="vm-reason" value="通过可视化页面标记为已验证" />
-      <div class="vm-error" id="vm-error"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeVerifyModal()">取消</button>
-      <button class="btn-primary" onclick="submitVerify()">标记为已验证</button>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>"""

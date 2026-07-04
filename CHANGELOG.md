@@ -5,6 +5,10 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.4 — 2026-07-04
+
+- 修复可视化页面打开时报 `Cannot read properties of null (reading 'addEventListener')` 的崩溃：tooltip 与 draft 边验证 modal 的 DOM 元素被放在 `<script>` 之后，导致脚本执行时还未解析到这些元素。现已将它们移到 `<script>` 之前。
+
 ## 2.3.3 — 2026-07-04
 
 - 可视化页面 UI 改进：

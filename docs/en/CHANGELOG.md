@@ -6,6 +6,13 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.4 - 2026-07-04
+
+- Fixed a visualization crash on page open: `Cannot read properties of null (reading
+  'addEventListener')`. The tooltip and draft-edge verification modal DOM elements were placed after
+  the `<script>` tag, so the script ran before those elements were parsed. They are now moved before
+  the `<script>` tag.
+
 ## 2.3.3 - 2026-07-04
 
 - Visualization UI improvements:
