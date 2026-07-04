@@ -6,6 +6,19 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.2.0 - 2026-07-04
+
+- **Dynamic visualization**: `gen_graph_html.py` gains a `--serve` mode — a local server (127.0.0.1
+  only, auto-selects a free port, prints the view URL) serving live graph data, with in-page
+  draft→verified marking. The write goes through `kg_core.verify_edge`, so validation / changelog /
+  reverse-index all apply — equivalent to the AI calling the kg MCP tool (governance preserved,
+  ADR-004). Without `--serve` it still exports a static `graph_view.html`.
+- **Cytoscape localized**: the front-end library ships in the dist (`tools/vendor/cytoscape.min.js`);
+  the CDN dependency is removed so visualization works offline. Static export inlines cytoscape to
+  keep a single self-contained file.
+- `install.py`'s `deploy_tools` now deploys `vendor`; `kg_admin update` can upgrade the bundled
+  cytoscape.
+
 ## 2.1.0 - 2026-07-03
 
 - **Governance layer (v2)**: MCP single read/write gateway; writes strictly validated (code path /

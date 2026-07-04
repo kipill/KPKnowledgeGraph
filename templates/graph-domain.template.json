@@ -1,0 +1,67 @@
+{
+  "_comment": "域文件模板。复制为 graph-<domain>.json(如 graph-social.json),把 domain 字段改成实际域 id。一个文件一个域,内含该域所有 entry。related.to 可以跨域指向别的域文件里的 entry(validate 会跨文件全局校验)。所有 _comment 字段填写后删除。注:以 _ 开头的 entry 会被 validate/tools 跳过,所以模板里的占位 entry 不会干扰实际校验——实际使用时改成真实 entry id 即可。",
+  "version": "1.0",
+  "domain": "<domain_id>",
+  "updated_at": "YYYY-MM-DD",
+  "entries": {
+    "_template_system": {
+      "_comment": "system 类型:独立系统(例:公会、邮件、战斗、订单、支付)。开发者会用一个词指代的就建 system。",
+      "type": "system",
+      "name_cn": "示例系统",
+      "doc": "entries/example_system.md",
+      "summary": "一句话描述系统职责(< 30 字)",
+      "code": {
+        "_comment": "代码定位。路径用相对项目根的全路径(AI 能直接 view)。子字段灵活,建议:manager(单) / data[](数组) / dao[](数组) / message[](数组)。项目特定的可加 handler/script/config 等。concept 类型可留空 {}。",
+        "manager": "path/to/SystemManager.java",
+        "data": ["path/to/MainDataClass.java"],
+        "dao": ["path/to/SystemDao.java"],
+        "message": ["path/to/SystemMessageProto.java"]
+      },
+      "related": [
+        {
+          "_comment": "to: 必须是已定义的 entry id(可跨域)。context: 一句话(< 50 字)。confidence: draft(未验证) 或 verified(已验证)。单向定义即可,反向索引由 build_reverse_index.py 自动生成。",
+          "to": "_template_dependency",
+          "context": "描述两个系统怎么关联(< 50 字)",
+          "confidence": "draft"
+        }
+      ],
+      "persistence_pitfalls": [
+        "字段X 修改后必须持久化,否则重启数据丢失"
+      ],
+      "tags": ["core"]
+    },
+    "_template_feature": {
+      "_comment": "feature 类型:某个 system 的子功能(例:公会拍卖、订单退款)。必填 doc/summary/code。",
+      "type": "feature",
+      "name_cn": "示例功能",
+      "doc": "entries/example_feature.md",
+      "summary": "一句话描述功能",
+      "code": {
+        "manager": "path/to/FeatureManager.java"
+      },
+      "related": [
+        {"to": "_template_system", "context": "属于该系统的子功能", "confidence": "verified"}
+      ],
+      "tags": ["feature"]
+    },
+    "_template_concept": {
+      "_comment": "concept 类型:跨多系统的规则/机制(例:持久化约定、跨服同步规则、日志规范、事务边界)。非代码实体,code 可空 {}。",
+      "type": "concept",
+      "name_cn": "示例概念",
+      "doc": "entries/example_concept.md",
+      "summary": "一句话描述这个概念/规则",
+      "code": {},
+      "related": [],
+      "tags": ["concept", "infrastructure"]
+    },
+    "_template_dependency": {
+      "_comment": "占位 entry,仅让 _template_system.related.to 有合法指向。实际项目中删掉,换成真实系统。",
+      "type": "system",
+      "name_cn": "占位",
+      "doc": "entries/_placeholder.md",
+      "summary": "占位",
+      "code": {},
+      "related": []
+    }
+  }
+}

@@ -5,6 +5,12 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.2.0 — 2026-07-04
+
+- **可视化动态化**：`gen_graph_html.py` 新增 `--serve` 模式，起本地 server（仅 127.0.0.1、自动选可用端口、启动返回查看地址），浏览器实时查看图谱，并支持在页面直接把 draft 边标记为 verified——写操作经 `kg_core.verify_edge`，校验 / changelog / 反向索引全走，与 AI 调 kg MCP 工具等价（守治理层，ADR-004）。无 `--serve` 时仍生成静态 `graph_view.html`。
+- **cytoscape 本地化**：前端库随发行包提供（`tools/vendor/cytoscape.min.js`），去掉 CDN 依赖，可视化零外网依赖；静态导出模式内联 cytoscape，保持单文件可离线分享。
+- `install.py` 的 `deploy_tools` 增加 vendor 部署；`kg_admin update` 可随之升级 cytoscape 版本。
+
 ## 2.1.0 — 2026-07-03
 
 - **治理层（v2 架构）**：MCP 唯一读写出入口，写入强校验（code 路径/related 目标/reason 必填）、changelog/querylog 审计、反向索引自动重建

@@ -79,6 +79,18 @@ def deploy_tools(dist_dir, target, kg_rel, overwrite_skill_cmd):
             shutil.copy(f, kg_abs / "templates" / f.name)
     print("[更新] %s/templates/" % kg_rel)
 
+    # 可视化用的前端库（cytoscape），随工具层一起部署/升级
+    vendor_src = dist_dir / "tools" / "vendor"
+    if vendor_src.is_dir():
+        vendor_dst = kg_abs / "tools" / "vendor"
+        vendor_dst.mkdir(parents=True, exist_ok=True)
+        m = 0
+        for f in sorted(vendor_src.iterdir()):
+            if f.is_file():
+                shutil.copy(f, vendor_dst / f.name)
+                m += 1
+        print("[更新] %s/tools/vendor/（%d 个文件）" % (kg_rel, m))
+
     skill_dst = target / ".claude" / "skills" / "kg-consult" / "SKILL.md"
     skill_src = dist_dir / "skills" / "kg-consult.skill.md"
     if skill_src.exists():

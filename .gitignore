@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.egg-info/
 .pytest_cache/
+.claude/
 
 # 生成的图谱数据（不进发行仓库；装到目标项目时各自管理）
 graph-*.json
@@ -11,7 +12,9 @@ reverse_index.json
 changelog.jsonl
 querylog.jsonl
 graph_view.html
-!examples/graph_view.html
+CLAUDE.md
+!examples/*
+!templates/*
 
 # 系统
 .DS_Store

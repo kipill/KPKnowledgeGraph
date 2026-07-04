@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-知识图谱可视化生成器
+知识图谱可视化生成器 / 动态查看 server
 
-读取所有 graph-*.json，生成可在浏览器本地打开的 HTML 可视化。
-需要网络连接（加载 Cytoscape.js CDN）。
+两种模式:
+  1. 静态导出（默认）: python gen_graph_html.py [--root ...] [--output ...]
+     生成自包含的 graph_view.html（cytoscape 内联、数据内联），可离线打开/分享。
+  2. 动态查看: python gen_graph_html.py --serve [--port N] [--no-open]
+     起本地 http server（仅 127.0.0.1，自动选可用端口），浏览器实时查看图谱，
+     并支持在页面上把 draft 边标记为 verified——写操作经 kg_core.verify_edge，
+     自带校验 / changelog / 反向索引重建，与 AI 调 kg MCP 工具完全等价（守治理层）。
 
-用法:
-  python gen_graph_html.py
-  python gen_graph_html.py --root <project_root>
-  python gen_graph_html.py --output <path>
+cytoscape.js 随发行包本地提供（tools/vendor/cytoscape.min.js），无外网依赖。
 """
 
-import json
 import argparse
+import json
 import sys
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kg_core import KG, resolve_kg_dir, KGError  # noqa: E402
+from kg_core import KG, KGError, resolve_kg_dir  # noqa: E402
+
+CYTOSCAPE_VERSION = "3.28.1"
+VENDOR_JS = Path(__file__).resolve().parent / "vendor" / "cytoscape.min.js"
 
 # 域颜色按域名排序循环分配，保证任意项目的域都有区分度
 PALETTE = [
@@ -108,6 +116,24 @@ def load_data(kg_dir: Path, per_stats=None) -> dict:
     return {"nodes": nodes, "edges": edges, "domains": domains_info}
 
 
+def _project_name(kg_dir: Path, root: Path) -> str:
+    main_graph = json.loads((kg_dir / "graph.json").read_text("utf-8"))
+    return main_graph.get("project") or root.name
+
+
+def _fill_placeholders(html: str, project: str, nc: int, ec: int,
+                       total_queries: int, accuracy, cytoscape_tag: str, bootstrap: str) -> str:
+    acc_text = ("%.0f%%" % (accuracy * 100)) if accuracy is not None else "暂无反馈"
+    return (html
+            .replace("__PROJECT__", project)
+            .replace("__CYTOSCAPE_TAG__", cytoscape_tag)
+            .replace("__QC__", str(total_queries))
+            .replace("__ACC__", acc_text)
+            .replace("__NC__", str(nc))
+            .replace("__EC__", str(ec))
+            .replace("__BOOTSTRAP__", bootstrap))
+
+
 # ==================== HTML 模板 ====================
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
@@ -115,7 +141,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>知识图谱 · __PROJECT__</title>
-<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+__CYTOSCAPE_TAG__
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;color:#c9d1d9;height:100vh;display:flex;flex-direction:column;overflow:hidden}
@@ -149,6 +175,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
 .pit{border-left:3px solid #da3633;padding:5px 8px;margin:3px 0;font-size:12px;line-height:1.4;background:#161b22;border-radius:0 4px 4px 0}
 .ci{font-size:11px;color:#58a6ff;padding:2px 0;font-family:monospace;word-break:break-all}
 .ci.sub{color:#8b949e}
+.hint{font-size:11px;color:#8b949e;line-height:1.5;margin-top:8px;padding:6px 8px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
 </style>
 </head>
 <body>
@@ -157,7 +184,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
   <span class="sub">__PROJECT__ &nbsp;·&nbsp; __NC__ 个系统 &nbsp;·&nbsp; __EC__ 条关联 &nbsp;·&nbsp; 累计查询 __QC__ 次 &nbsp;·&nbsp; 反馈准确率 __ACC__</span>
   <div style="margin-left:auto;display:flex;gap:8px">
     <button class="hbtn" onclick="doLayout()">重排</button>
-    <button class="hbtn" onclick="cy.fit(undefined,40)">适应</button>
+    <button class="hbtn" onclick="doFit()">适应</button>
     <button class="hbtn" onclick="resetFilter()">全部</button>
   </div>
 </div>
@@ -168,7 +195,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
       <div>
         <div class="st">图例</div>
         <div class="lr"><div class="lv"></div><span>verified（已验证）</span></div>
-        <div class="lr"><div class="ld"></div><span>draft（待验证）</span></div>
+        <div class="lr"><div class="ld"></div><span>draft（点击边可标记为已验证）</span></div>
       </div>
     </div>
     <div id="det-hdr">节点详情</div>
@@ -179,48 +206,128 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
   <div id="cy-wrap"><div id="cy"></div></div>
 </div>
 <script>
-const D=__DATA__;
-const els=[];
-D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats},position:{x:n.pos.x,y:n.pos.y}}));
-D.edges.forEach(e=>els.push({data:{id:e.id,source:e.source,target:e.target,context:e.context,confidence:e.confidence,ec:e.edgeColor,ls:e.lineStyle}}));
-
-const cy=cytoscape({
-  container:document.getElementById('cy'),
-  elements:els,
-  style:[
-    {selector:'node',style:{
-      'background-color':'data(color)',
-      'label':'data(label)',
-      'color':'#fff',
-      'text-valign':'center','text-halign':'center',
-      'font-size':'11px','font-weight':'600',
-      'width':120,'height':38,
-      'shape':'round-rectangle',
-      'text-wrap':'wrap','text-max-width':'100px',
-      'text-outline-color':'#000','text-outline-opacity':.3,'text-outline-width':1,
-    }},
-    {selector:'node:selected',style:{'border-width':3,'border-color':'#58a6ff'}},
-    {selector:'node.faded',style:{opacity:.12}},
-    {selector:'edge',style:{
-      'width':1.5,
-      'line-color':'data(ec)',
-      'target-arrow-color':'data(ec)',
-      'target-arrow-shape':'triangle',
-      'curve-style':'bezier',
-      'opacity':.75,
-      'line-style':'data(ls)',
-    }},
-    {selector:'edge.faded',style:{opacity:.04}},
-    {selector:'edge:selected',style:{width:3,opacity:1}},
-  ],
-  layout:{name:'preset',fit:true,padding:60}
-});
-
-function doLayout(){cy.layout({name:'preset',fit:true,padding:60,animate:true,animationDuration:400}).run();}
-
-// Domain filter
+let cy=null;
 let active=null;
+
+function render(D){
+  if(cy){ cy.destroy(); cy=null; }
+  const els=[];
+  D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats},position:{x:n.pos.x,y:n.pos.y}}));
+  D.edges.forEach(e=>els.push({data:{id:e.id,source:e.source,target:e.target,context:e.context,confidence:e.confidence,ec:e.edgeColor,ls:e.lineStyle}}));
+
+  cy=cytoscape({
+    container:document.getElementById('cy'),
+    elements:els,
+    style:[
+      {selector:'node',style:{
+        'background-color':'data(color)',
+        'label':'data(label)',
+        'color':'#fff',
+        'text-valign':'center','text-halign':'center',
+        'font-size':'11px','font-weight':'600',
+        'width':120,'height':38,
+        'shape':'round-rectangle',
+        'text-wrap':'wrap','text-max-width':'100px',
+        'text-outline-color':'#000','text-outline-opacity':.3,'text-outline-width':1,
+      }},
+      {selector:'node:selected',style:{'border-width':3,'border-color':'#58a6ff'}},
+      {selector:'node.faded',style:{opacity:.12}},
+      {selector:'edge',style:{
+        'width':1.5,
+        'line-color':'data(ec)',
+        'target-arrow-color':'data(ec)',
+        'target-arrow-shape':'triangle',
+        'curve-style':'bezier',
+        'opacity':.75,
+        'line-style':'data(ls)',
+      }},
+      {selector:'edge.faded',style:{opacity:.04}},
+      {selector:'edge:selected',style:{width:3,opacity:1}},
+    ],
+    layout:{name:'preset',fit:true,padding:60}
+  });
+
+  // Domain filter buttons
+  const df=document.getElementById('df'); df.innerHTML='';
+  Object.entries(D.domains).forEach(([d,info])=>{
+    const b=document.createElement('button');
+    b.className='dbtn';b.dataset.d=d;
+    b.style.setProperty('--dc',info.color);
+    b.innerHTML=`<div class="ddot"></div><span class="dname">${d}</span><span class="dcnt">${info.count}</span>`;
+    b.title=info.desc||'';
+    b.onclick=()=>filterDomain(d);
+    df.appendChild(b);
+  });
+
+  // Edge tooltip on hover
+  cy.on('mouseover','edge',function(e){
+    const ctx=e.target.data('context');
+    if(ctx) e.target.style({'label':ctx,'font-size':'9px','color':'#c9d1d9','text-background-color':'#161b22','text-background-opacity':1,'text-background-padding':'3px'});
+  });
+  cy.on('mouseout','edge',function(e){
+    e.target.style({'label':'','text-background-opacity':0});
+  });
+
+  // Node click → detail panel
+  cy.on('tap','node',function(e){
+    const d=e.target.data();
+    let h=`<div class="dn" style="color:${d.color}">${d.label}</div>`;
+    h+=`<div class="dm">${d.domain} · ${d.type} · <code>${d.id}</code></div>`;
+    h+=`<div class="ds">${d.summary||'暂无描述'}</div>`;
+    if(d.pitfalls&&d.pitfalls.length){
+      h+=`<div class="dsec">⚠ 持久化注意点</div>`;
+      d.pitfalls.forEach(p=>{h+=`<div class="pit">${p}</div>`;});
+    }
+    if(d.code&&Object.keys(d.code).length){
+      h+=`<div class="dsec">📁 关键代码</div>`;
+      Object.entries(d.code).forEach(([k,v])=>{
+        if(typeof v==='string'&&!v.endsWith('/')){
+          h+=`<div class="ci" title="${v}">● ${v.split('/').pop()}</div>`;
+        }else if(Array.isArray(v)){
+          const show=v.slice(0,4);
+          show.forEach(f=>{if(typeof f==='string')h+=`<div class="ci" title="${f}">○ ${f.split('/').pop()}</div>`;});
+          if(v.length>4)h+=`<div class="ci sub">...共 ${v.length} 个</div>`;
+        }
+      });
+    }
+    const st=d.stats||{};
+    h+=`<div class="dsec">📊 使用数据</div>`;
+    h+=`<div class="ci">查询命中 ${st.hits||0} 次 &nbsp;·&nbsp; 反馈 准确 ${st.acc||0} / 不准 ${st.bad||0}</div>`;
+    if(st.changes&&st.changes.length){
+      h+=`<div class="dsec">🕘 变更历史（共 ${st.change_count} 次，最近 ${st.changes.length} 条）</div>`;
+      st.changes.forEach(c=>{h+=`<div class="pit" style="border-color:#30363d">${(c.ts||'').slice(0,10)} [${c.op}] ${c.reason||''}</div>`;});
+    }
+    document.getElementById('det').innerHTML=h;
+  });
+
+  // Click empty background → clear detail
+  cy.on('tap',function(e){
+    if(e.target===cy)document.getElementById('det').innerHTML='<div class="emp">点击节点查看详情</div>';
+  });
+
+  // Click a draft edge → mark as verified (POST /api/verify_edge)
+  cy.on('tap','edge',onEdgeTap);
+
+  // 运营汇总
+  (function(){
+    const s=D.summary||{};
+    const acc=(s.accuracy===null||s.accuracy===undefined)?'暂无':Math.round(s.accuracy*100)+'%';
+    let h='';
+    h+=`<div class="ci">累计查询 ${s.total_queries||0} 次 &nbsp;·&nbsp; 总命中 ${s.total_hits||0} 次</div>`;
+    h+=`<div class="ci">反馈 ${s.total_feedback||0} 条：准确 ${s.feedback_accurate||0} / 不准 ${s.feedback_inaccurate||0} &nbsp;·&nbsp; 准确率 ${acc}</div>`;
+    h+=`<div class="ci">entry 被查过 ${s.queried_entries||0} / 共 ${s.total_entries||0} &nbsp;·&nbsp; 从未查过 ${s.never_queried_entries||0}</div>`;
+    h+=`<div class="ci">总变更 ${s.total_changes||0} 次</div>`;
+    document.getElementById('sum').innerHTML=h;
+  })();
+
+  if(active){ filterDomain(active); }
+}
+
+function doLayout(){ if(cy) cy.layout({name:'preset',fit:true,padding:60,animate:true,animationDuration:400}).run(); }
+function doFit(){ if(cy) cy.fit(undefined,40); }
+
 function filterDomain(d){
+  if(!cy) return;
   if(active===d){resetFilter();return;}
   active=d;
   document.querySelectorAll('.dbtn').forEach(b=>b.classList.toggle('on',b.dataset.d===d));
@@ -233,131 +340,225 @@ function filterDomain(d){
 }
 function resetFilter(){
   active=null;
+  if(!cy) return;
   cy.elements().removeClass('faded');
   document.querySelectorAll('.dbtn').forEach(b=>b.classList.remove('on'));
 }
 
-// Build domain buttons
-const df=document.getElementById('df');
-Object.entries(D.domains).forEach(([d,info])=>{
-  const b=document.createElement('button');
-  b.className='dbtn';b.dataset.d=d;
-  b.style.setProperty('--dc',info.color);
-  b.innerHTML=`<div class="ddot"></div><span class="dname">${d}</span><span class="dcnt">${info.count}</span>`;
-  b.title=info.desc||'';
-  b.onclick=()=>filterDomain(d);
-  df.appendChild(b);
-});
+// 动态模式：从 server 拉数据后渲染
+function loadData(){
+  return fetch('/api/data').then(r=>r.json()).then(render);
+}
 
-// Edge tooltip on hover
-cy.on('mouseover','edge',function(e){
-  const ctx=e.target.data('context');
-  const conf=e.target.data('confidence');
-  if(ctx) e.target.style({'label':ctx,'font-size':'9px','color':'#c9d1d9','text-background-color':'#161b22','text-background-opacity':1,'text-background-padding':'3px'});
-});
-cy.on('mouseout','edge',function(e){
-  e.target.style({'label':'','text-background-opacity':0});
-});
-
-// Node click
-cy.on('tap','node',function(e){
+// 点 draft 边 → 标记已验证（写操作走 /api/verify_edge → kg_core.verify_edge）
+function onEdgeTap(e){
   const d=e.target.data();
-  let h=`<div class="dn" style="color:${d.color}">${d.label}</div>`;
-  h+=`<div class="dm">${d.domain} · ${d.type} · <code>${d.id}</code></div>`;
-  h+=`<div class="ds">${d.summary||'暂无描述'}</div>`;
-  if(d.pitfalls&&d.pitfalls.length){
-    h+=`<div class="dsec">⚠ 持久化注意点</div>`;
-    d.pitfalls.forEach(p=>{h+=`<div class="pit">${p}</div>`;});
-  }
-  if(d.code&&Object.keys(d.code).length){
-    h+=`<div class="dsec">📁 关键代码</div>`;
-    Object.entries(d.code).forEach(([k,v])=>{
-      if(typeof v==='string'&&!v.endsWith('/')){
-        h+=`<div class="ci" title="${v}">● ${v.split('/').pop()}</div>`;
-      }else if(Array.isArray(v)){
-        const show=v.slice(0,4);
-        show.forEach(f=>{if(typeof f==='string')h+=`<div class="ci" title="${f}">○ ${f.split('/').pop()}</div>`;});
-        if(v.length>4)h+=`<div class="ci sub">...共 ${v.length} 个</div>`;
-      }
-    });
-  }
-  const st=d.stats||{};
-  h+=`<div class="dsec">📊 使用数据</div>`;
-  h+=`<div class="ci">查询命中 ${st.hits||0} 次 &nbsp;·&nbsp; 反馈 准确 ${st.acc||0} / 不准 ${st.bad||0}</div>`;
-  if(st.changes&&st.changes.length){
-    h+=`<div class="dsec">🕘 变更历史（共 ${st.change_count} 次，最近 ${st.changes.length} 条）</div>`;
-    st.changes.forEach(c=>{h+=`<div class="pit" style="border-color:#30363d">${(c.ts||'').slice(0,10)} [${c.op}] ${c.reason||''}</div>`;});
-  }
-  document.getElementById('det').innerHTML=h;
-});
+  if(d.confidence!=='draft') return;  // 只 draft 边可标记
+  const label=d.source+' → '+d.target;
+  const reason=prompt('标记为已验证：\n'+label+'\n\n原因（写入 changelog，可编辑后确认）：','通过可视化页面标记为已验证');
+  if(reason===null) return;  // 用户取消
+  fetch('/api/verify_edge',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({from_id:d.source,to_id:d.target,reason:reason})})
+    .then(r=>r.json())
+    .then(j=>{
+      if(j.ok){ loadData(); }  // 全图刷新（reverse_index/stats 已变）
+      else { alert('标记失败：\n'+j.error); }
+    })
+    .catch(err=>alert('请求失败：'+err));
+}
 
-cy.on('tap',function(e){
-  if(e.target===cy)document.getElementById('det').innerHTML='<div class="emp">点击节点查看详情</div>';
-});
-
-// 运营汇总
-(function(){
-  const s=D.summary||{};
-  const acc=(s.accuracy===null||s.accuracy===undefined)?'暂无':Math.round(s.accuracy*100)+'%';
-  let h='';
-  h+=`<div class="ci">累计查询 ${s.total_queries||0} 次 &nbsp;·&nbsp; 总命中 ${s.total_hits||0} 次</div>`;
-  h+=`<div class="ci">反馈 ${s.total_feedback||0} 条：准确 ${s.feedback_accurate||0} / 不准 ${s.feedback_inaccurate||0} &nbsp;·&nbsp; 准确率 ${acc}</div>`;
-  h+=`<div class="ci">entry 被查过 ${s.queried_entries||0} / 共 ${s.total_entries||0} &nbsp;·&nbsp; 从未查过 ${s.never_queried_entries||0}</div>`;
-  h+=`<div class="ci">总变更 ${s.total_changes||0} 次</div>`;
-  document.getElementById('sum').innerHTML=h;
-})();
+__BOOTSTRAP__
 </script>
 </body>
 </html>"""
 
 
+# ==================== 静态导出 ====================
+
+def gen_static(root: Path, kg_dir: Path, out_path: Path) -> int:
+    if not VENDOR_JS.exists():
+        print("ERROR: 找不到 cytoscape 本地文件: %s" % VENDOR_JS)
+        print("       serve 模式或静态导出都需要它随发行包部署。")
+        return 1
+    cyto_inline = VENDOR_JS.read_text("utf-8")
+    if "</script" in cyto_inline.lower():
+        print("ERROR: cytoscape.min.js 含 </script 序列，无法安全内联")
+        return 1
+
+    kg = KG(root, kg_dir)
+    stats = kg.stats()
+    summary = stats["summary"]
+    data = load_data(kg.kg_dir, stats["per_entry"])
+    nc, ec = len(data["nodes"]), len(data["edges"])
+
+    html = _fill_placeholders(
+        HTML_TEMPLATE,
+        project=_project_name(kg.kg_dir, root),
+        nc=nc, ec=ec,
+        total_queries=stats["total_queries"],
+        accuracy=summary["accuracy"],
+        cytoscape_tag="<script>%s</script>" % cyto_inline,
+        bootstrap="render(%s);" % json.dumps(data, ensure_ascii=False),
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html, encoding="utf-8")
+    print("已生成: %s" % out_path)
+    print("  nodes: %d, edges: %d, 累计查询: %d, 准确率: %s"
+          % (nc, ec, stats["total_queries"], summary["accuracy"]))
+    print("  自包含单文件，cytoscape 已内联，可离线打开")
+    return 0
+
+
+# ==================== 动态查看 server ====================
+
+def build_page_html(root: Path, kg_dir: Path) -> str:
+    """serve 模式 / 路由每次构造：页眉服务端渲染，body 由前端 fetch /api/data。"""
+    kg = KG(root, kg_dir)
+    stats = kg.stats()
+    summary = stats["summary"]
+    data = load_data(kg.kg_dir, stats["per_entry"])
+    nc, ec = len(data["nodes"]), len(data["edges"])
+    return _fill_placeholders(
+        HTML_TEMPLATE,
+        project=_project_name(kg.kg_dir, root),
+        nc=nc, ec=ec,
+        total_queries=stats["total_queries"],
+        accuracy=summary["accuracy"],
+        cytoscape_tag='<script src="/static/cytoscape.min.js"></script>',
+        bootstrap="loadData();",
+    )
+
+
+class KGHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+    def __init__(self, addr, handler, root, kg_dir):
+        super().__init__(addr, handler)
+        self.root = root
+        self.kg_dir = kg_dir
+        self.vendor_js = VENDOR_JS
+
+
+class KGHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args):  # 静默默认访问日志
+        pass
+
+    def _send(self, code, ctype, body: bytes, cache=False):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        if cache:
+            self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _json(self, code, obj):
+        self._send(code, "application/json; charset=utf-8",
+                   json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/":
+            try:
+                html = build_page_html(self.server.root, self.server.kg_dir)
+            except KGError as e:
+                self._json(500, {"ok": False, "error": str(e)}); return
+            self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
+        elif path == "/static/cytoscape.min.js":
+            vj = self.server.vendor_js
+            if vj.exists():
+                self._send(200, "application/javascript; charset=utf-8", vj.read_bytes(), cache=True)
+            else:
+                self._send(404, "text/plain; charset=utf-8", b"cytoscape.min.js not found")
+        elif path == "/api/data":
+            try:
+                kg = KG(self.server.root, self.server.kg_dir)
+                stats = kg.stats()
+                data = load_data(kg.kg_dir, stats["per_entry"])
+                data["summary"] = stats["summary"]   # load_data 不含 summary，这里补
+                self._json(200, data)
+            except KGError as e:
+                self._json(400, {"ok": False, "error": str(e)})
+        else:
+            self._send(404, "text/plain; charset=utf-8", b"Not found")
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if path != "/api/verify_edge":
+            self._send(404, "text/plain; charset=utf-8", b"Not found"); return
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length > 0 else b"{}"
+            payload = json.loads(raw.decode("utf-8") or "{}")
+            kg = KG(self.server.root, self.server.kg_dir)
+            # 唯一写动作：转调 kg_core.verify_edge，校验/changelog/反向索引全走 _commit
+            entry = kg.verify_edge(payload.get("from_id"), payload.get("to_id"), payload.get("reason"))
+            self._json(200, {"ok": True, "entry": entry})
+        except KGError as e:
+            self._json(400, {"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json(400, {"ok": False, "error": "请求处理失败: %s" % e})
+
+
+def serve(root: Path, kg_dir: Path, port: int, open_browser: bool) -> int:
+    # 启动自检：图谱目录错误立即退出（照搬 kg_mcp_server 模式）
+    try:
+        KG(root, kg_dir)
+    except KGError as e:
+        print("启动失败: %s" % e, file=sys.stderr)
+        return 1
+    if not VENDOR_JS.exists():
+        print("警告: 未找到 cytoscape 本地文件 %s，页面将无法渲染图谱" % VENDOR_JS, file=sys.stderr)
+
+    addr = ("127.0.0.1", port or 0)   # port=0 → OS 分配可用端口，避免冲突
+    httpd = KGHTTPServer(addr, KGHandler, root, kg_dir)
+    actual_port = httpd.server_address[1]
+    url = "http://127.0.0.1:%d" % actual_port
+    print("知识图谱可视化 server 已启动")
+    print("  打开: %s" % url)
+    print("  仅本机访问（127.0.0.1）。Ctrl+C 停止。")
+    print("  点 draft 边（虚线）可标记为已验证。")
+    sys.stdout.flush()
+    if open_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n已停止。")
+    finally:
+        httpd.server_close()
+    return 0
+
+
 # ==================== 主流程 ====================
 
 def main():
-    parser = argparse.ArgumentParser(description="生成知识图谱可视化 HTML")
-    parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--kg", type=Path, default=None)
-    parser.add_argument("--output", type=Path, default=None)
+    parser = argparse.ArgumentParser(description="知识图谱可视化（静态导出 / 动态查看 server）")
+    parser.add_argument("--root", type=Path, default=Path("."), help="项目根（默认当前目录）")
+    parser.add_argument("--kg", type=Path, default=None, help="图谱目录（默认自动探测 .claude/kg 或 tools/qx_rag）")
+    parser.add_argument("--output", type=Path, default=None,
+                        help="静态模式输出文件（默认 <图谱目录>/graph_view.html）")
+    parser.add_argument("--serve", action="store_true", help="启动动态查看 server（默认生成静态 HTML）")
+    parser.add_argument("--port", type=int, default=0, help="server 端口（默认 0 = 自动选可用端口）")
+    parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     args = parser.parse_args()
 
-    project_root = args.root.resolve()
+    root = args.root.resolve()
     try:
-        kg_dir = resolve_kg_dir(project_root, args.kg)
+        kg_dir = resolve_kg_dir(root, args.kg)
     except KGError as e:
-        print(f"ERROR: {e}")
-        return 1
-    out_path = ((project_root / args.output).resolve() if args.output
-                else kg_dir / "graph_view.html")
-
-    if not kg_dir.exists():
-        print(f"ERROR: 图谱目录不存在: {kg_dir}")
+        print("ERROR: %s" % e)
         return 1
 
-    print("读取图谱数据...")
-    stats = KG(project_root, args.kg).stats()
-    total_queries = stats["total_queries"]
-    summary = stats["summary"]
-    data = load_data(kg_dir, stats["per_entry"])
-    data["summary"] = summary
-    nc, ec = len(data["nodes"]), len(data["edges"])
-    print(f"  nodes: {nc}, edges: {ec}, 累计查询: {total_queries}, 准确率: {summary['accuracy']}")
+    if args.serve:
+        return serve(root, kg_dir, args.port, not args.no_open)
 
-    main_graph = json.loads((kg_dir / "graph.json").read_text("utf-8"))
-    project_name = main_graph.get("project") or project_root.name
-
-    html = HTML_TEMPLATE
-    html = html.replace("__PROJECT__", project_name)
-    html = html.replace("__QC__", str(total_queries))
-    acc = summary["accuracy"]
-    html = html.replace("__ACC__", ("%.0f%%" % (acc * 100)) if acc is not None else "暂无反馈")
-    html = html.replace("__NC__", str(nc))
-    html = html.replace("__EC__", str(ec))
-    html = html.replace("__DATA__", json.dumps(data, ensure_ascii=False))
-
-    out_path.write_text(html, encoding="utf-8")
-    print(f"已生成: {out_path}")
-    print("  用浏览器打开该文件即可（需网络加载 Cytoscape.js）")
-    return 0
+    out_path = ((root / args.output).resolve() if args.output else kg_dir / "graph_view.html")
+    return gen_static(root, kg_dir, out_path)
 
 
 if __name__ == "__main__":
