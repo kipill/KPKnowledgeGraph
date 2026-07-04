@@ -6,6 +6,18 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.3 - 2026-07-04
+
+- Visualization UI improvements:
+  - Edge tooltip is larger (max-width 460px, 14px font, more padding) and now detects viewport
+    edges to avoid clipping near screen borders.
+  - Added a **node hover tooltip** showing the node summary, domain, and type.
+  - Nodes now use different shapes by `type`: `system` round-rectangle, `module` rectangle,
+    `service` ellipse, `api` diamond, `entity` hexagon.
+  - The draft-edge verification modal now shows node Chinese names for from/to, improving readability.
+  - Fixed a detail in static export where the operations summary was empty: `summary` is now
+    included in the generated HTML.
+
 ## 2.3.2 - 2026-07-04
 
 - Visualization UI improvements:

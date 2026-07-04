@@ -98,6 +98,8 @@ AI 扫描项目 → 列候选系统（你确认）→ 划分域 → 通过 MCP �
 
 ### 4. 可视化查看
 
+![可视化效果图](examples/demo_tooltip.png)
+
 ```bash
 # 导出静态 HTML（自包含、可分享）
 python -X utf8 .claude/kg/tools/gen_graph_html.py

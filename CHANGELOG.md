@@ -5,6 +5,15 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.3 — 2026-07-04
+
+- 可视化页面 UI 改进：
+  - 边关系提示框进一步加大（最大宽度 460px、字体 14px、padding 加大），并增加屏幕边界检测，避免贴边时被截断。
+  - 新增**节点悬停提示框**，显示节点摘要、所属域与类型。
+  - 节点按 `type` 区分形状：`system` 圆角矩形、`module` 矩形、`service` 椭圆、`api` 菱形、`entity` 六边形。
+  - draft 边验证 modal 中 from/to 显示节点中文名，提升可读性。
+  - 修复静态导出页面运营汇总数据为空的细节：现在会把 `summary` 一并写入 HTML。
+
 ## 2.3.2 — 2026-07-04
 
 - 可视化页面 UI 改进：

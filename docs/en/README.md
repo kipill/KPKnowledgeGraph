@@ -107,6 +107,8 @@ When working on a new feature, the AI auto-triggers the `kg-consult` skill:
 
 ### 4. Visualize
 
+![Visualization preview](examples/demo_tooltip.png)
+
 ```bash
 # Export a self-contained static HTML (shareable, offline)
 python -X utf8 .claude/kg/tools/gen_graph_html.py

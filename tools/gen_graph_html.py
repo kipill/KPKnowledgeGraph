@@ -178,13 +178,22 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
 .ci{font-size:11px;color:#58a6ff;padding:2px 0;font-family:monospace;word-break:break-all}
 .ci.sub{color:#8b949e}
 .hint{font-size:11px;color:#8b949e;line-height:1.5;margin-top:8px;padding:6px 8px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
-/* 边关系描述 tooltip */
-.edge-tooltip{position:fixed;z-index:1200;display:none;max-width:360px;background:rgba(22,27,34,0.96);border:1px solid #30363d;border-radius:8px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none;font-size:14px;line-height:1.5;color:#c9d1d9}
-.edge-tooltip .et-title{font-weight:700;margin-bottom:6px;color:#58a6ff;font-size:13px}
-.edge-tooltip .et-ctx{margin-bottom:6px;word-break:break-word}
-.edge-tooltip .et-conf{font-size:12px;font-weight:600}
-.edge-tooltip .et-conf.verified{color:#2ea043}
-.edge-tooltip .et-conf.draft{color:#d29922}
+/* 节点/边统一 tooltip */
+.kg-tooltip{position:fixed;z-index:1200;display:none;max-width:460px;min-width:180px;background:rgba(22,27,34,0.98);border:1px solid #30363d;border-radius:10px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.2);pointer-events:none;font-size:14px;line-height:1.55;color:#c9d1d9;backdrop-filter:blur(4px)}
+.kg-tooltip .tt-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:#58a6ff}
+.kg-tooltip .tt-hd .tt-arrow{font-weight:400;color:#8b949e}
+.kg-tooltip .tt-body{word-break:break-word;margin-bottom:8px}
+.kg-tooltip .tt-meta{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#8b949e}
+.kg-tooltip .tt-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.kg-tooltip .tt-tag.verified{background:rgba(46,160,67,.15);color:#3fb950}
+.kg-tooltip .tt-tag.draft{background:rgba(210,153,34,.15);color:#e3b341}
+.kg-tooltip .tt-tag.domain{background:#21262d;color:#c9d1d9}
+.kg-tooltip .tt-tag.type{background:#30363d;color:#c9d1d9}
+.kg-tooltip::after{content:'';position:absolute;width:0;height:0;border:8px solid transparent}
+.kg-tooltip.pos-bottom::after{top:-16px;left:20px;border-bottom-color:rgba(22,27,34,0.98)}
+.kg-tooltip.pos-top::after{bottom:-16px;left:20px;border-top-color:rgba(22,27,34,0.98)}
+.kg-tooltip.pos-right::after{left:-16px;top:20px;border-right-color:rgba(22,27,34,0.98)}
+.kg-tooltip.pos-left::after{right:-16px;top:20px;border-left-color:rgba(22,27,34,0.98)}
 /* draft 边验证 modal */
 .modal-overlay{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
 .modal-box{width:420px;max-width:92vw;background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;box-shadow:0 12px 32px rgba(0,0,0,.55)}
@@ -224,7 +233,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
       </div>
     </div>
     <div id="det-hdr">节点详情</div>
-    <div id="det"><div class="emp">点击节点查看详情</div></div>
+    <div id="det"><div class="emp">点击节点查看详情<br>悬停节点/边查看放大提示框</div></div>
     <div class="st" style="margin:10px 0 4px">运营汇总</div>
     <div id="sum"></div>
   </div>
@@ -233,11 +242,17 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
 <script>
 let cy=null;
 let active=null;
+let nodeMap={};
 
 function render(D){
   if(cy){ cy.destroy(); cy=null; }
+  nodeMap={};
+  D.nodes.forEach(n=>nodeMap[n.id]=n);
+  const TYPE_SHAPE={system:'round-rectangle',module:'rectangle',service:'ellipse',api:'diamond',entity:'hexagon'};
+  const TYPE_LABEL={system:'系统',module:'模块',service:'服务',api:'接口',entity:'实体'};
+
   const els=[];
-  D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats},position:{x:n.pos.x,y:n.pos.y}}));
+  D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,typeLabel:TYPE_LABEL[n.type]||n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats},position:{x:n.pos.x,y:n.pos.y}}));
   D.edges.forEach(e=>els.push({data:{id:e.id,source:e.source,target:e.target,context:e.context,confidence:e.confidence,ec:e.edgeColor,ls:e.lineStyle}}));
 
   cy=cytoscape({
@@ -249,21 +264,25 @@ function render(D){
         'label':'data(label)',
         'color':'#fff',
         'text-valign':'center','text-halign':'center',
-        'font-size':'11px','font-weight':'600',
-        'width':120,'height':38,
+        'font-size':'12px','font-weight':'600',
+        'width':126,'height':40,
         'shape':'round-rectangle',
-        'text-wrap':'wrap','text-max-width':'100px',
+        'text-wrap':'wrap','text-max-width':'106px',
         'text-outline-color':'#000','text-outline-opacity':.3,'text-outline-width':1,
       }},
+      {selector:'node[type="module"]',style:{shape:'rectangle',width:118,height:36,'border-width':2,'border-color':'#fff','border-opacity':.25}},
+      {selector:'node[type="service"]',style:{shape:'ellipse',width:132,height:46}},
+      {selector:'node[type="api"]',style:{shape:'diamond',width:96,height:96,'font-size':'11px','text-max-width':'80px'}},
+      {selector:'node[type="entity"]',style:{shape:'hexagon',width:112,height:44}},
       {selector:'node:selected',style:{'border-width':3,'border-color':'#58a6ff'}},
       {selector:'node.faded',style:{opacity:.12}},
       {selector:'edge',style:{
-        'width':1.5,
+        'width':1.8,
         'line-color':'data(ec)',
         'target-arrow-color':'data(ec)',
         'target-arrow-shape':'triangle',
         'curve-style':'bezier',
-        'opacity':.75,
+        'opacity':.8,
         'line-style':'data(ls)',
       }},
       {selector:'edge.faded',style:{opacity:.04}},
@@ -284,32 +303,66 @@ function render(D){
     df.appendChild(b);
   });
 
-  // Edge tooltip on hover
-  const edgeTip = document.getElementById('edge-tooltip');
-  const etFrom = document.getElementById('et-from');
-  const etTo = document.getElementById('et-to');
-  const etCtx = document.getElementById('et-ctx');
-  const etConf = document.getElementById('et-conf');
-  cy.on('mouseover','edge',function(e){
-    const d = e.target.data();
-    if(!d.context) return;
-    etFrom.textContent = d.source;
-    etTo.textContent = d.target;
-    etCtx.textContent = d.context;
-    etConf.textContent = d.confidence === 'verified' ? 'verified（已验证）' : 'draft（待验证）';
-    etConf.className = 'et-conf ' + (d.confidence === 'verified' ? 'verified' : 'draft');
-    edgeTip.style.display = 'block';
-  });
-  cy.on('mousemove','edge',function(e){
-    const ev = e.originalEvent;
-    if(ev){
-      edgeTip.style.left = (ev.clientX + 14) + 'px';
-      edgeTip.style.top = (ev.clientY + 14) + 'px';
-    }
-  });
-  cy.on('mouseout','edge',function(e){
-    edgeTip.style.display = 'none';
-  });
+  // Tooltip elements
+  const tt=document.getElementById('tt');
+  const ttFrom=document.getElementById('tt-from');
+  const ttTo=document.getElementById('tt-to');
+  const ttBody=document.getElementById('tt-body');
+  const ttTag1=document.getElementById('tt-tag1');
+  const ttTag2=document.getElementById('tt-tag2');
+  const ttTag3=document.getElementById('tt-tag3');
+
+  function showTooltip(){tt.style.display='block';}
+  function hideTooltip(){tt.style.display='none';tt.className='kg-tooltip';}
+  function positionTooltip(x,y){
+    const pad=14;
+    const rect=tt.getBoundingClientRect();
+    const vw=window.innerWidth,vh=window.innerHeight;
+    let left=x+pad,top=y+pad,cls='pos-bottom';
+    if(left+rect.width>vw-pad){left=x-rect.width-pad;cls='pos-left';}
+    if(top+rect.height>vh-pad){top=y-rect.height-pad;cls=cls==='pos-left'?'pos-left':'pos-top';}
+    if(left<pad)left=pad;
+    if(top<pad)top=pad;
+    tt.style.left=left+'px';
+    tt.style.top=top+'px';
+    tt.className='kg-tooltip '+cls;
+  }
+  function setEdgeTooltip(d,clientX,clientY){
+    const src=nodeMap[d.source],tgt=nodeMap[d.target];
+    ttFrom.textContent=src?src.name_cn:d.source;
+    ttTo.textContent=tgt?tgt.name_cn:d.target;
+    ttFrom.style.color=src?src.color:'#58a6ff';
+    ttTo.style.color=tgt?tgt.color:'#58a6ff';
+    ttBody.textContent=d.context||'暂无描述';
+    ttTag1.textContent=d.confidence==='verified'?'verified（已验证）':'draft（待验证）';
+    ttTag1.className='tt-tag '+(d.confidence==='verified'?'verified':'draft');
+    ttTag2.textContent=(src?src.domain:'')+' → '+(tgt?tgt.domain:'');
+    ttTag2.className='tt-tag domain';
+    ttTag3.style.display='none';
+    showTooltip();
+    requestAnimationFrame(()=>positionTooltip(clientX,clientY));
+  }
+  function setNodeTooltip(d,clientX,clientY){
+    ttFrom.textContent=d.label;
+    ttFrom.style.color=d.color;
+    ttTo.textContent='';
+    ttBody.innerHTML=(d.summary||'暂无描述')+'<div style="margin-top:8px;font-size:12px;color:#8b949e">'+d.domain+' · '+(d.typeLabel||d.type)+'</div>';
+    ttTag1.textContent=d.typeLabel||d.type;
+    ttTag1.className='tt-tag type';
+    ttTag2.textContent=d.domain;
+    ttTag2.className='tt-tag domain';
+    ttTag3.style.display='none';
+    showTooltip();
+    requestAnimationFrame(()=>positionTooltip(clientX,clientY));
+  }
+
+  cy.on('mouseover','edge',function(e){setEdgeTooltip(e.target.data(),e.originalEvent.clientX,e.originalEvent.clientY);});
+  cy.on('mousemove','edge',function(e){if(tt.style.display==='block')positionTooltip(e.originalEvent.clientX,e.originalEvent.clientY);});
+  cy.on('mouseout','edge',function(e){hideTooltip();});
+
+  cy.on('mouseover','node',function(e){setNodeTooltip(e.target.data(),e.originalEvent.clientX,e.originalEvent.clientY);});
+  cy.on('mousemove','node',function(e){if(tt.style.display==='block')positionTooltip(e.originalEvent.clientX,e.originalEvent.clientY);});
+  cy.on('mouseout','node',function(e){hideTooltip();});
 
   // Node click → detail panel
   cy.on('tap','node',function(e){
@@ -345,7 +398,7 @@ function render(D){
 
   // Click empty background → clear detail
   cy.on('tap',function(e){
-    if(e.target===cy)document.getElementById('det').innerHTML='<div class="emp">点击节点查看详情</div>';
+    if(e.target===cy)document.getElementById('det').innerHTML='<div class="emp">点击节点查看详情<br>悬停节点/边查看放大提示框</div>';
   });
 
   // Click a draft edge → mark as verified (POST /api/verify_edge)
@@ -356,9 +409,9 @@ function render(D){
     const s=D.summary||{};
     const acc=(s.accuracy===null||s.accuracy===undefined)?'暂无':Math.round(s.accuracy*100)+'%';
     let h='';
-    h+=`<div class="ci">累计查询 ${s.total_queries||0} 次 &nbsp;·&nbsp; 总命中 ${s.total_hits||0} 次</div>`;
-    h+=`<div class="ci">反馈 ${s.total_feedback||0} 条：准确 ${s.feedback_accurate||0} / 不准 ${s.feedback_inaccurate||0} &nbsp;·&nbsp; 准确率 ${acc}</div>`;
-    h+=`<div class="ci">entry 被查过 ${s.queried_entries||0} / 共 ${s.total_entries||0} &nbsp;·&nbsp; 从未查过 ${s.never_queried_entries||0}</div>`;
+    h+=`<div class="ci">累计查询 ${s.total_queries||0} 次 · 总命中 ${s.total_hits||0} 次</div>`;
+    h+=`<div class="ci">反馈 ${s.total_feedback||0} 条：准确 ${s.feedback_accurate||0} / 不准 ${s.feedback_inaccurate||0} · 准确率 ${acc}</div>`;
+    h+=`<div class="ci">entry 被查过 ${s.queried_entries||0} / 共 ${s.total_entries||0} · 从未查过 ${s.never_queried_entries||0}</div>`;
     h+=`<div class="ci">总变更 ${s.total_changes||0} 次</div>`;
     document.getElementById('sum').innerHTML=h;
   })();
@@ -404,8 +457,9 @@ const vmError = document.getElementById('vm-error');
 
 function openVerifyModal(d){
   pendingVerify = {source: d.source, target: d.target};
-  vmFrom.textContent = d.source;
-  vmTo.textContent = d.target;
+  const src=nodeMap[d.source], tgt=nodeMap[d.target];
+  vmFrom.textContent = src ? src.name_cn : d.source;
+  vmTo.textContent = tgt ? tgt.name_cn : d.target;
   vmCtx.textContent = d.context || '';
   vmReason.value = '通过可视化页面标记为已验证';
   vmError.textContent = '';
@@ -453,11 +507,15 @@ function onEdgeTap(e){
 __BOOTSTRAP__
 </script>
 
-<!-- 边关系描述 tooltip -->
-<div id="edge-tooltip" class="edge-tooltip" style="display:none">
-  <div class="et-title"><span id="et-from"></span> → <span id="et-to"></span></div>
-  <div class="et-ctx" id="et-ctx"></div>
-  <div class="et-conf" id="et-conf"></div>
+<!-- 统一浮动提示框 -->
+<div id="tt" class="kg-tooltip">
+  <div class="tt-hd"><span id="tt-from"></span><span class="tt-arrow">→</span><span id="tt-to"></span></div>
+  <div class="tt-body" id="tt-body"></div>
+  <div class="tt-meta">
+    <span class="tt-tag" id="tt-tag1"></span>
+    <span class="tt-tag domain" id="tt-tag2"></span>
+    <span class="tt-tag type" id="tt-tag3"></span>
+  </div>
 </div>
 
 <!-- draft 边验证 modal -->
@@ -498,6 +556,7 @@ def gen_static(root: Path, kg_dir: Path, out_path: Path) -> int:
     stats = kg.stats()
     summary = stats["summary"]
     data = load_data(kg.kg_dir, stats["per_entry"])
+    data["summary"] = summary
     nc, ec = len(data["nodes"]), len(data["edges"])
 
     html = _fill_placeholders(
