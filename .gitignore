@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# 生成的图谱数据（不进发行仓库；装到目标项目时各自管理）
+graph-*.json
+reverse_index.json
+changelog.jsonl
+querylog.jsonl
+graph_view.html
+
+# 系统
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

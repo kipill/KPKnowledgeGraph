@@ -1,0 +1,25 @@
+{
+  "_comment": "示例主索引(完整可运行例子)。展示分域结构:domains(域清单)+ cross_domain_relations(跨域关联)。可在本目录跑:python ../tools/validate.py --kg . 验证。填写后删除所有 _comment。",
+  "version": "1.0",
+  "updated_at": "2026-05-10",
+  "domains": {
+    "social": {
+      "file": "graph-social.json",
+      "desc": "社交关系:公会、邮件",
+      "key_entries": ["guild", "mail"]
+    },
+    "economy": {
+      "file": "graph-economy.json",
+      "desc": "经济:拍卖、货币",
+      "key_entries": ["auction", "economy"]
+    }
+  },
+  "cross_domain_relations": [
+    {
+      "from": "social",
+      "to": "economy",
+      "context": "公会拍卖涉及货币结算;邮件发放拍卖物品",
+      "confidence": "verified"
+    }
+  ]
+}

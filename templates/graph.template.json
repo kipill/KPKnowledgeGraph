@@ -1,0 +1,27 @@
+{
+  "_comment": "知识图谱主索引。复制此文件为 graph.json 并填充。entry 详情不在本文件,在各 graph-<domain>.json 里。本文件只放:① 域清单(domains) ② 跨域关联(cross_domain_relations)。完整规范见 DEVELOPMENT.md §2。所有 _comment 字段填写后删除。",
+  "version": "1.0",
+  "updated_at": "YYYY-MM-DD",
+  "domains": {
+    "_example_domain": {
+      "_comment": "每个 domain 一个 key。file: 指向域文件(相对本目录,如 graph-social.json)。desc: 一句话域职责。key_entries: 该域最核心的几个 entry id(给人/AI 快速定位,非强制完整)。",
+      "file": "graph-example_domain.json",
+      "desc": "域职责一句话描述(如:社交关系——公会、邮件、好友)",
+      "key_entries": ["example_system"]
+    },
+    "_another_domain": {
+      "file": "graph-another_domain.json",
+      "desc": "另一个域的职责",
+      "key_entries": ["another_system"]
+    }
+  },
+  "cross_domain_relations": [
+    {
+      "_comment": "域级别关联(粗粒度,不是 entry 级)。辅助 AI 判断改动是否跨域。entry 之间的精细关联写在各域文件的 related 里。from/to 必须是 domains 里已定义的 key。",
+      "from": "_example_domain",
+      "to": "_another_domain",
+      "context": "说明两个域怎么联动(< 50 字)",
+      "confidence": "draft"
+    }
+  ]
+}

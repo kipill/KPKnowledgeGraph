@@ -1,0 +1,7 @@
+{
+  "_comment": "空主索引起点。install 脚本把它拷为 graph.json。跑 /kg-init 或手动填 domains 后,本文件可删。完整结构示例见 graph.template.json。",
+  "version": "1.0",
+  "updated_at": "YYYY-MM-DD",
+  "domains": {},
+  "cross_domain_relations": []
+}
