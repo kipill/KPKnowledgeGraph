@@ -6,6 +6,14 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.0 - 2026-07-04
+
+- **New `kg-view` skill**: when the user says "show the graph / visualize / relationship graph",
+  the AI auto-starts the viewer server in the background, returns the URL, and stops it when done
+  (no need to run the command manually).
+- `install.py` skill deployment changed from hardcoded `kg-consult` to iterating `skills/*.skill.md`,
+  so new skills deploy automatically on install / upgrade (`kg_admin update`).
+
 ## 2.2.1 - 2026-07-04
 
 - Fix `kg_mcp_server`'s `serverInfo.version` being stale: now read dynamically from the `VERSION`

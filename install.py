@@ -91,19 +91,20 @@ def deploy_tools(dist_dir, target, kg_rel, overwrite_skill_cmd):
                 m += 1
         print("[更新] %s/tools/vendor/（%d 个文件）" % (kg_rel, m))
 
-    skill_dst = target / ".claude" / "skills" / "kg-consult" / "SKILL.md"
-    skill_src = dist_dir / "skills" / "kg-consult.skill.md"
-    if skill_src.exists():
+    # 部署所有 skills/*.skill.md → .claude/skills/<name>/SKILL.md
+    for skill_src in sorted((dist_dir / "skills").glob("*.skill.md")):
+        name = skill_src.name[: -len(".skill.md")]
+        skill_dst = target / ".claude" / "skills" / name / "SKILL.md"
         if overwrite_skill_cmd:
             skill_dst.parent.mkdir(parents=True, exist_ok=True)
             _write_text(skill_dst, skill_src, kg_rel)
-            print("[更新] .claude/skills/kg-consult/SKILL.md")
+            print("[更新] .claude/skills/%s/SKILL.md" % name)
         elif not skill_dst.exists():
             skill_dst.parent.mkdir(parents=True, exist_ok=True)
             _write_text(skill_dst, skill_src, kg_rel)
-            print("[创建] .claude/skills/kg-consult/SKILL.md")
+            print("[创建] .claude/skills/%s/SKILL.md" % name)
         else:
-            print("[跳过] .claude/skills/kg-consult/SKILL.md 已存在（首次安装不覆盖）")
+            print("[跳过] .claude/skills/%s/SKILL.md 已存在（首次安装不覆盖）" % name)
 
     cmd_dst = target / ".claude" / "commands" / "kg-init.md"
     cmd_src = dist_dir / "kg-init.md"

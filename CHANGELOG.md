@@ -5,6 +5,11 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.0 — 2026-07-04
+
+- **新增 `kg-view` skill**：用户说"看图谱 / 可视化 / 关系图"时，AI 自动后台启动可视化 server、返回浏览器地址、看完停止（不再需要手动敲命令）。
+- `install.py` 的 skill 部署从硬编码 `kg-consult` 改为遍历 `skills/*.skill.md`，新增 skill 自动随安装 / 升级（`kg_admin update`）部署。
+
 ## 2.2.1 — 2026-07-04
 
 - 修复 `kg_mcp_server` 的 `serverInfo.version` 滞后：改为从 `VERSION` 文件动态读取，不再硬编码（此前一直停在 2.0.0，不随发版更新）。
