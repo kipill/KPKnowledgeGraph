@@ -5,6 +5,10 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.2.1 — 2026-07-04
+
+- 修复 `kg_mcp_server` 的 `serverInfo.version` 滞后：改为从 `VERSION` 文件动态读取，不再硬编码（此前一直停在 2.0.0，不随发版更新）。
+
 ## 2.2.0 — 2026-07-04
 
 - **可视化动态化**：`gen_graph_html.py` 新增 `--serve` 模式，起本地 server（仅 127.0.0.1、自动选可用端口、启动返回查看地址），浏览器实时查看图谱，并支持在页面直接把 draft 边标记为 verified——写操作经 `kg_core.verify_edge`，校验 / changelog / 反向索引全走，与 AI 调 kg MCP 工具等价（守治理层，ADR-004）。无 `--serve` 时仍生成静态 `graph_view.html`。

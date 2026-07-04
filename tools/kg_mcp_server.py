@@ -28,7 +28,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kg_core import KG, KGError  # noqa: E402
 
 SERVER_NAME = "kg"
-SERVER_VERSION = "2.0.0"
+
+
+def _server_version():
+    """从发行包/安装目录的 VERSION 文件读取，避免 serverInfo.version 与 VERSION 不一致
+    （曾硬编码导致它滞后于实际发版版本）。读不到时回退 0.0.0。"""
+    try:
+        v = (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip()
+        return v or "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+
+SERVER_VERSION = _server_version()
 
 REASON_SCHEMA = {
     "type": "string",

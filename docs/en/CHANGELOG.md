@@ -6,6 +6,11 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.2.1 - 2026-07-04
+
+- Fix `kg_mcp_server`'s `serverInfo.version` being stale: now read dynamically from the `VERSION`
+  file instead of hardcoded (it was stuck at 2.0.0 and never tracked releases).
+
 ## 2.2.0 - 2026-07-04
 
 - **Dynamic visualization**: `gen_graph_html.py` gains a `--serve` mode — a local server (127.0.0.1
