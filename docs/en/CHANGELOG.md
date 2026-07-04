@@ -6,6 +6,12 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.1 - 2026-07-04
+
+- `gen_graph_html.py --serve` adds `--idle-timeout` (default 1800s = 30min). Server auto-stops
+  after idle time, preventing zombie servers if the skill or Claude Code exits unexpectedly.
+- `kg-view` skill docs explain manual Ctrl+C vs skill TaskStop shutdown, plus the 30-min idle fallback.
+
 ## 2.3.0 - 2026-07-04
 
 - **New `kg-view` skill**: when the user says "show the graph / visualize / relationship graph",

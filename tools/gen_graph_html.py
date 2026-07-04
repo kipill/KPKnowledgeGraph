@@ -17,6 +17,8 @@ cytoscape.js 随发行包本地提供（tools/vendor/cytoscape.min.js），无�
 import argparse
 import json
 import sys
+import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -444,6 +446,9 @@ class KGHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # 静默默认访问日志
         pass
 
+    def _touch(self):
+        self.server.last_request_time = time.time()
+
     def _send(self, code, ctype, body: bytes, cache=False):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -458,6 +463,7 @@ class KGHandler(BaseHTTPRequestHandler):
                    json.dumps(obj, ensure_ascii=False).encode("utf-8"))
 
     def do_GET(self):
+        self._touch()
         path = self.path.split("?", 1)[0]
         if path == "/":
             try:
@@ -484,6 +490,7 @@ class KGHandler(BaseHTTPRequestHandler):
             self._send(404, "text/plain; charset=utf-8", b"Not found")
 
     def do_POST(self):
+        self._touch()
         path = self.path.split("?", 1)[0]
         if path != "/api/verify_edge":
             self._send(404, "text/plain; charset=utf-8", b"Not found"); return
@@ -501,7 +508,7 @@ class KGHandler(BaseHTTPRequestHandler):
             self._json(400, {"ok": False, "error": "请求处理失败: %s" % e})
 
 
-def serve(root: Path, kg_dir: Path, port: int, open_browser: bool) -> int:
+def serve(root: Path, kg_dir: Path, port: int, open_browser: bool, idle_timeout: int = 1800) -> int:
     # 启动自检：图谱目录错误立即退出（照搬 kg_mcp_server 模式）
     try:
         KG(root, kg_dir)
@@ -515,9 +522,29 @@ def serve(root: Path, kg_dir: Path, port: int, open_browser: bool) -> int:
     httpd = KGHTTPServer(addr, KGHandler, root, kg_dir)
     actual_port = httpd.server_address[1]
     url = "http://127.0.0.1:%d" % actual_port
+    httpd.last_request_time = time.time()   # 用于空闲超时判断
+
+    # 空闲超时守护线程：默认 30 分钟无请求自动停止，避免 skill/AI 意外退出后 server 残留
+    watcher = None
+    if idle_timeout and idle_timeout > 0:
+        def _idle_watcher():
+            while True:
+                time.sleep(5)
+                if time.time() - httpd.last_request_time > idle_timeout:
+                    print("\n[%d 秒无请求，自动停止 server]" % idle_timeout, file=sys.stderr)
+                    sys.stdout.flush()
+                    httpd.shutdown()
+                    break
+        watcher = threading.Thread(target=_idle_watcher, daemon=True)
+        watcher.start()
+
     print("知识图谱可视化 server 已启动")
     print("  打开: %s" % url)
-    print("  仅本机访问（127.0.0.1）。Ctrl+C 停止。")
+    print("  仅本机访问（127.0.0.1）。Ctrl+C 停止。", end="")
+    if idle_timeout and idle_timeout > 0:
+        print(" %d 分钟无请求自动停止。" % (idle_timeout // 60))
+    else:
+        print()
     print("  点 draft 边（虚线）可标记为已验证。")
     sys.stdout.flush()
     if open_browser:
@@ -545,6 +572,8 @@ def main():
     parser.add_argument("--serve", action="store_true", help="启动动态查看 server（默认生成静态 HTML）")
     parser.add_argument("--port", type=int, default=0, help="server 端口（默认 0 = 自动选可用端口）")
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
+    parser.add_argument("--idle-timeout", type=int, default=1800,
+                        help="空闲多少秒后自动停止（默认 1800=30 分钟，0 禁用）")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -555,7 +584,7 @@ def main():
         return 1
 
     if args.serve:
-        return serve(root, kg_dir, args.port, not args.no_open)
+        return serve(root, kg_dir, args.port, not args.no_open, idle_timeout=args.idle_timeout)
 
     out_path = ((root / args.output).resolve() if args.output else kg_dir / "graph_view.html")
     return gen_static(root, kg_dir, out_path)

@@ -5,6 +5,11 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.1 — 2026-07-04
+
+- `gen_graph_html.py --serve` 加 `--idle-timeout` 参数（默认 1800 秒 = 30 分钟），无请求自动停止，防止 skill 或 AI 意外退出后 server 残留。
+- `kg-view` skill 文档说明手动 Ctrl+C 与 skill TaskStop 两种关闭方式，以及 30 分钟 idle 兜底。
+
 ## 2.3.0 — 2026-07-04
 
 - **新增 `kg-view` skill**：用户说"看图谱 / 可视化 / 关系图"时，AI 自动后台启动可视化 server、返回浏览器地址、看完停止（不再需要手动敲命令）。
