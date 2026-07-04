@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "domain": "economy",
+  "updated_at": "2026-05-10",
+  "entries": {
+    "auction": {
+      "type": "system",
+      "name_cn": "拍卖系统",
+      "doc": "entries/auction.md",
+      "summary": "全服物品拍卖、出价、结算",
+      "code": {
+        "manager": "src/main/java/example/auction/AuctionManager.java"
+      },
+      "related": [
+        { "to": "mail", "context": "拍卖结束通过邮件发送结算和物品", "confidence": "verified" },
+        { "to": "economy", "context": "出价扣货币、结算转账", "confidence": "verified" }
+      ],
+      "persistence_pitfalls": [
+        "AuctionItem 出价后必须 saveToDB",
+        "拍卖结束后 AuctionItem 状态变更必须 saveToDB"
+      ],
+      "tags": ["economy"]
+    },
+    "economy": {
+      "type": "system",
+      "name_cn": "经济系统",
+      "doc": "entries/economy.md",
+      "summary": "货币管理、商店、充值",
+      "code": {
+        "manager": "src/main/java/example/economy/CurrencyManager.java"
+      },
+      "related": [
+        { "to": "auction", "context": "拍卖出价/结算扣加货币", "confidence": "verified" }
+      ],
+      "persistence_pitfalls": [
+        "Player 货币字段修改后必须 saveToDB",
+        "充值流水必须落地流水表,避免丢单"
+      ],
+      "tags": ["economy", "core"]
+    }
+  }
+}

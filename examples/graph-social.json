@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "domain": "social",
+  "updated_at": "2026-05-10",
+  "entries": {
+    "guild": {
+      "type": "system",
+      "name_cn": "公会系统",
+      "doc": "entries/guild.md",
+      "summary": "玩家组织:成员管理、共享资源、集体活动",
+      "code": {
+        "manager": "src/main/java/example/guild/GuildManager.java",
+        "data": ["src/main/java/example/guild/Guild.java"]
+      },
+      "related": [
+        { "to": "mail", "context": "入会/退会/系统通知走邮件", "confidence": "verified" },
+        { "to": "auction", "context": "公会内部拍卖(子功能,跨到 economy 域)", "confidence": "draft" }
+      ],
+      "persistence_pitfalls": [
+        "Guild.storeData 修改后必须 saveToDB,否则重启数据丢失",
+        "Player.guildId 修改后必须 saveToDB + 通知公会成员(单边写会两边不一致)"
+      ],
+      "tags": ["social", "core"]
+    },
+    "mail": {
+      "type": "system",
+      "name_cn": "邮件系统",
+      "doc": "entries/mail.md",
+      "summary": "玩家消息、系统通知、附件物品发放",
+      "code": {
+        "manager": "src/main/java/example/mail/MailManager.java"
+      },
+      "related": [
+        { "to": "guild", "context": "公会邮件", "confidence": "verified" }
+      ],
+      "persistence_pitfalls": [
+        "Mail 物品附件领取后必须 saveToDB"
+      ],
+      "tags": ["social", "core"]
+    }
+  }
+}
