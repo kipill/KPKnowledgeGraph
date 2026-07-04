@@ -33,6 +33,7 @@ KPKnowledgeGraph 给 AI 的是**导航**而非百科全书：系统在哪、改�
 - **🛡️ 防漂移**：PreToolUse hook 拦截对图谱 JSON 的直接编辑，杜绝"AI 绕过校验乱写"
 - **📝 全程审计**：`changelog.jsonl` 记每次修改（谁/何时/改了什么/为什么），`querylog.jsonl` 记每次查询
 - **📊 运营可视化**：每个系统的查询命中、准确/不准反馈、变更历史，数据驱动迭代取舍
+- **👁️ 可视化浏览**：浏览器查看系统关系图，支持点 draft 边直接标记为 verified；可导出静态 `graph_view.html`，也可启动实时本地 server
 - **🔄 图谱复用**：`kg_pack` / `kg_unpack` 在相似项目之间装箱/拆箱，复用积累的踩坑经验
 - **⬆️ 就地升级**：`kg_admin.py update` 类似 `claude update`，已装项目一条命令拉取最新版（只换工具层，图谱数据不动）
 - **🌐 跨工具通用**：Claude Code 与 Codex 都能用，纯 Python 标准库实现，零第三方依赖

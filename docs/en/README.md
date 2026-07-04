@@ -40,6 +40,7 @@ written in is correct and traceable — so it doesn't rot over time.
 - **🛡️ Drift-proof**: a PreToolUse hook blocks direct edits to graph JSON, eliminating "AI bypassing validation"
 - **📝 Full audit**: `changelog.jsonl` records every change (who / when / what / why); `querylog.jsonl` records every query
 - **📊 Operational visibility**: query hits, accurate/inaccurate feedback, and change history per system — data-driven iteration
+- **👁️ Visual browser**: view the system-relationship graph in a browser, click a draft edge to mark it verified directly; export a static `graph_view.html` or start a live local server
 - **🔄 Graph reuse**: `kg_pack` / `kg_unpack` to box/unbox between similar projects, reusing accumulated pitfall knowledge
 - **⬆️ In-place upgrade**: `kg_admin.py update` works like `claude update` — one command in any installed project pulls the latest (only the tool layer; graph data is untouched)
 - **🌐 Cross-tool**: works with both Claude Code and Codex; pure Python standard library, zero third-party deps
