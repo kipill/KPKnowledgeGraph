@@ -5,6 +5,10 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.3.5 — 2026-07-04
+
+- 修复 `kg_guard_hook` 在子目录下崩溃：hook 此前注册成相对路径 `python -X utf8 .claude/kg/tools/kg_guard_hook.py`，而 Claude Code 跑 hook 时 cwd 是**会话当前目录**——一旦 `cd` 进子目录（如 `backend/`），相对路径解析不到脚本，Python 退出码非 0 被 Claude Code 当作拦截，脚本内部的 fail-open 根本没机会执行（报错 `can't open file ... kg_guard_hook.py`）。改为 **exec 形式 + `${CLAUDE_PROJECT_DIR}`**：Claude Code 自己把占位符替换成项目根绝对路径再 spawn，不依赖 shell 变量展开，Windows（PowerShell/Git Bash）与 Unix 通用。`install.py` 改为幂等：检测到旧的相对路径形式会原地升级，**受影响用户重跑 `install.py` 即修复**（`kg_admin update` 按契约不碰 settings.json）。
+
 ## 2.3.4 — 2026-07-04
 
 - 修复可视化页面打开时报 `Cannot read properties of null (reading 'addEventListener')` 的崩溃：tooltip 与 draft 边验证 modal 的 DOM 元素被放在 `<script>` 之后，导致脚本执行时还未解析到这些元素。现已将它们移到 `<script>` 之前。

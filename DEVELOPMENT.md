@@ -429,12 +429,19 @@ server 以启动时的 cwd 为项目根（`--root` 可覆盖），自动探测�
 
 ### 8.2 kg_guard_hook.py（防漂移 hook，Claude Code 专用）
 
-PreToolUse hook，安装器自动注册到 `.claude/settings.json`：
+PreToolUse hook，安装器自动注册到 `.claude/settings.json`（exec 形式，`${CLAUDE_PROJECT_DIR}` 锚定项目根）：
 
 ```json
 {"hooks": {"PreToolUse": [{"matcher": "Edit|Write",
-  "hooks": [{"type": "command", "command": "python -X utf8 .claude/kg/tools/kg_guard_hook.py", "timeout": 10}]}]}}
+  "hooks": [{"type": "command", "command": "python",
+             "args": ["-X", "utf8", "${CLAUDE_PROJECT_DIR}/.claude/kg/tools/kg_guard_hook.py"],
+             "timeout": 10}]}]}}
 ```
+
+> 用 `${CLAUDE_PROJECT_DIR}` 而非相对路径：Claude Code 跑 hook 时 cwd 是会话当前目录，
+> 一旦 `cd` 进子目录，相对路径 `.claude/...` 就解析不到。`${CLAUDE_PROJECT_DIR}` 由
+> Claude Code 直接替换成项目根绝对路径，Windows（PowerShell/Git Bash）与 Unix 通用。
+> `install.py` 幂等：检测到旧的相对路径形式会原地升级，重跑 install 即修复历史安装。
 
 拦截规则：文件名匹配 `graph*.json` / `reverse_index.json` / `*.jsonl` 且所在目录含
 graph.json → 阻止并提示改用 MCP 工具。`entries/*.md` 放行。hook 自身异常时放行

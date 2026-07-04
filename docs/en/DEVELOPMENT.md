@@ -220,8 +220,14 @@ Codex (~/.codex/config.toml): [mcp_servers.kg] command="python" args=["-X","utf8
 Reloads graph files per call; external changes (git pull) need no restart.
 
 ### 8.2 kg_guard_hook.py (drift-proof hook, Claude Code only)
-PreToolUse, auto-registered to .claude/settings.json. Blocks graph*.json / reverse_index.json /
-*.jsonl when the file's dir contains graph.json; entries/*.md passes; fail-open on hook error.
+PreToolUse, auto-registered to .claude/settings.json in **exec form** with the `${CLAUDE_PROJECT_DIR}`
+placeholder: `command:"python"`, `args:["-X","utf8","${CLAUDE_PROJECT_DIR}/.claude/kg/tools/kg_guard_hook.py"]`.
+The placeholder is substituted by Claude Code itself to an absolute project-root path, so the hook
+resolves regardless of the session's current directory (a bare relative path breaks once you `cd`
+into a subdir, since hook cwd follows the session). Works cross-platform (Windows PowerShell/Git Bash
+and Unix). `install.py` is idempotent: it upgrades the legacy relative-path form in place, so re-running
+install fixes older installations. Blocks graph*.json / reverse_index.json / *.jsonl when the file's dir
+contains graph.json; entries/*.md passes; fail-open on hook error.
 
 ### 8.3 validate.py
 ```bash

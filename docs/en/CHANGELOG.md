@@ -6,6 +6,19 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.3.5 - 2026-07-04
+
+- Fixed `kg_guard_hook` crashing under subdirectories. The hook was registered with a **relative**
+  path `python -X utf8 .claude/kg/tools/kg_guard_hook.py`, but Claude Code runs hooks with cwd =
+  **session current directory** — once you `cd` into a subdir (e.g. `backend/`), the relative path no
+  longer resolves, Python exits non-zero ("can't open file ... kg_guard_hook.py"), and Claude Code
+  treats that as a block; the script's own fail-open never runs. Switched to **exec form +
+  `${CLAUDE_PROJECT_DIR}`**: Claude Code substitutes the placeholder to an absolute project-root path
+  before spawning, independent of any shell, working cross-platform (Windows PowerShell/Git Bash and
+  Unix). `install.py` is now idempotent — it detects and upgrades the legacy relative-path form in
+  place, so **affected users fix it by re-running `install.py`** (`kg_admin update` intentionally
+  never touches settings.json).
+
 ## 2.3.4 - 2026-07-04
 
 - Fixed a visualization crash on page open: `Cannot read properties of null (reading

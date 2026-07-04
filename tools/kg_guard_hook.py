@@ -12,9 +12,12 @@ entries/*.md 深度文档不受限，可以直接编辑。
 逃生口：设置环境变量 KG_ALLOW_DIRECT_EDIT=1 可跳过拦截（人工修复场景）。
 任何异常一律放行（fail-open），保证 hook 故障不影响正常开发。
 
-注册（.claude/settings.json）:
+注册（.claude/settings.json，exec 形式 + ${CLAUDE_PROJECT_DIR} 锚定项目根，
+不受会话 cd 进子目录影响；Windows/Unix 通用）:
   "hooks": {"PreToolUse": [{"matcher": "Edit|Write",
-    "hooks": [{"type": "command", "command": "python -X utf8 .claude/kg/tools/kg_guard_hook.py"}]}]}
+    "hooks": [{"type": "command", "command": "python",
+               "args": ["-X", "utf8", "${CLAUDE_PROJECT_DIR}/.claude/kg/tools/kg_guard_hook.py"],
+               "timeout": 10}]}]}
 """
 
 import fnmatch

@@ -123,6 +123,51 @@ def deploy_tools(dist_dir, target, kg_rel, overwrite_skill_cmd):
     (kg_abs / "VERSION").write_text(read_version(dist_dir) + "\n", encoding="utf-8")
 
 
+def _hook_refers_guard(h):
+    """PreToolUse[].hooks[] 里的一项是否指向 kg_guard_hook.py（兼容 shell 形式与 exec 形式）。"""
+    if "kg_guard_hook" in h.get("command", ""):
+        return True
+    return any("kg_guard_hook" in str(a) for a in (h.get("args") or []))
+
+
+def _hook_is_canonical(h):
+    """已是最新 exec 形式：command=python，args 含 ${CLAUDE_PROJECT_DIR}.../kg_guard_hook.py。"""
+    if h.get("command") != "python":
+        return False
+    return any("CLAUDE_PROJECT_DIR" in str(a) and "kg_guard_hook" in str(a)
+               for a in (h.get("args") or []))
+
+
+def ensure_guard_hook(settings, kg_rel):
+    """把 kg_guard_hook 注册成最新形式；幂等。
+    返回 'register'（新装）/ 'upgrade'（旧相对路径形式原地升级）/ 'skip'（已是最新）。
+
+    早期版本注册成 shell 形式相对路径 `python -X utf8 .claude/kg/tools/kg_guard_hook.py`，
+    会随会话 cwd 解析：cd 进子目录后 hook 找不到脚本，Python 退出码非 0 被 Claude Code 当作拦截，
+    脚本内部的 fail-open 根本没机会跑。改用 exec 形式 + ${CLAUDE_PROJECT_DIR}：
+    Claude Code 自己把占位符替换成项目根绝对路径再 spawn，不依赖任何 shell 变量展开，
+    Windows（PowerShell/Git Bash）与 Unix 通用，且锚定项目根、不受 cd 影响。
+    """
+    hook = {
+        "type": "command",
+        "command": "python",
+        "args": ["-X", "utf8",
+                 "${CLAUDE_PROJECT_DIR}/%s/tools/kg_guard_hook.py" % kg_rel],
+        "timeout": 10,
+    }
+    pre = settings.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    for matcher in pre:
+        for h in matcher.get("hooks", []):
+            if _hook_refers_guard(h):
+                if _hook_is_canonical(h):
+                    return "skip"
+                h.clear()
+                h.update(hook)
+                return "upgrade"
+    pre.append({"matcher": "Edit|Write", "hooks": [hook]})
+    return "register"
+
+
 def main():
     parser = argparse.ArgumentParser(description="安装/升级知识图谱系统")
     parser.add_argument("target", nargs="?", default=".", help="目标项目根（默认当前目录）")
@@ -180,20 +225,20 @@ def main():
         write_json(mcp_path, mcp)
         print("[注册] .mcp.json → kg MCP server")
 
-    # 注册防漂移 hook（合并 settings.json）
+    # 注册防漂移 hook（合并 settings.json；幂等，旧相对路径形式自动升级）
     settings_path = target / ".claude" / "settings.json"
     settings = read_json(settings_path, {})
-    hook_cmd = "python -X utf8 %s/tools/kg_guard_hook.py" % kg_rel
-    pre = settings.setdefault("hooks", {}).setdefault("PreToolUse", [])
-    already = any("kg_guard_hook" in h.get("command", "")
-                  for m in pre for h in m.get("hooks", []))
-    if already:
-        print("[跳过] settings.json 已有 kg_guard_hook（不覆盖）")
-    else:
-        pre.append({"matcher": "Edit|Write",
-                    "hooks": [{"type": "command", "command": hook_cmd, "timeout": 10}]})
+    action = ensure_guard_hook(settings, kg_rel)
+    if action == "register":
         write_json(settings_path, settings)
-        print("[注册] .claude/settings.json → PreToolUse 拦截直接编辑图谱")
+        print("[注册] .claude/settings.json → PreToolUse 拦截直接编辑图谱"
+              "（${CLAUDE_PROJECT_DIR} 锚定项目根，子目录下也生效）")
+    elif action == "upgrade":
+        write_json(settings_path, settings)
+        print("[更新] .claude/settings.json → kg_guard_hook 改用 ${CLAUDE_PROJECT_DIR} 锚定"
+              "（修复 cd 进子目录后 hook 找不到脚本的崩溃）")
+    else:
+        print("[跳过] settings.json 已有 kg_guard_hook（已是最新形式）")
 
     # 记录发行仓库地址（供 kg_admin update）
     repo = args.repo or os.environ.get("KG_DIST_REPO")
