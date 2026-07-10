@@ -65,6 +65,10 @@ env var / the --kg flag.
 | kg_add_domain / kg_add_cross_relation | create domain / domain-level relation (init only) |
 | kg_stats | operational stats (global summary + per-entry) |
 | kg_feedback | report entry accuracy (telemetry, auto at task close) |
+| kg_add_capability_catalog | catalog a capability catalog (experience layer) — an enum family of configurable behaviors, for reuse recommendation; human-in-the-loop on the write side |
+| kg_scout_reuse | reuse recommendation (triage gate) — before building a new capability, check whether an existing one can be configured; server coarse-ranks, LLM fine-ranks |
+| kg_report_reuse_outcome | write the recommendation outcome back — telemetry into reuse_feedback.jsonl, no reason/confirmation needed |
+| kg_get_reuse_stats | reuse-recommendation stats — adoption rate, grade (unverified/normal/trusted) |
 
 All write tools require a reason, written to changelog.jsonl.
 
@@ -81,6 +85,46 @@ All write tools require a reason, written to changelog.jsonl.
 
 For manual bulk fixes: set KG_ALLOW_DIRECT_EDIT=1 to bypass the hook and edit files directly; after,
 you MUST run validate.py + build_reverse_index.py.
+
+---
+
+## 2.5 Capability catalog and reuse recommendation (experience layer, v2.4.0+)
+
+The graph has two orthogonal directions — don't conflate them:
+
+| Direction | Fact query (kg_query etc.) | Reuse recommendation (kg_scout_reuse) |
+|---|---|---|
+| Trigger | any time you touch code | only when "building a new capability / adding new behavior" |
+| Consumer | the LLM uses it directly | a **human** decides (the LLM relays) |
+| Nature | fact (where the code is) | experience (this kind of request can usually use X) |
+| Cost of being wrong | wrong file, self-corrects | if executed directly → an incomplete solution ships |
+
+A **capability catalog** = an "enum/constant family of a configurable behavior," where each member is
+a ready-made capability (reward/discount-delivery method, notification-trigger method, ticket-status
+type...).
+It qualifies when all three hold: (1) members are behavior variants, not pure data labels;
+(2) they're consumed by a switch/config table/registry; (3) requesters phrase requests as a
+**description** rather than naming the enum. Counter-examples (these belong to the fact layer, not the
+experience layer): log-level enums, message-protocol enums, and other pure data labels.
+
+**Storage**: carried as a `type=concept` entry plus an `x_capability_members` extension field. Each
+member: `{enum_value (required), id?, name?, scenarios[], reuse_note?, status?}`. `scenarios` feeds
+the coarse ranking; `reuse_note` spells out the **capability boundary** (dimensions it can't be
+configured for, e.g. "no delay / no per-recipient filtering") and is the key to preventing bad
+recommendations. Members with `status=deprecated` don't participate in recommendation.
+
+**Human-in-the-loop on both sides**:
+- Write side: the LLM reads the source, organizes the fact fields, and drafts the semantic fields →
+  **user confirms** → `kg_add_capability_catalog`.
+- Recommend side: `kg_scout_reuse` coarse-ranks → the LLM fine-ranks and grades → **relays to the
+  user with options** → the user decides → `kg_report_reuse_outcome` records the feedback. The tool
+  deliberately does not return a copy-pasteable config string, forcing human confirmation.
+
+**Feedback loop**: `reuse_feedback.jsonl` records each recommendation's decision
+(reuse/new/misunderstood); `kg_get_reuse_stats` aggregates it into an adoption rate and grades it
+(<3 recommendations = unverified / ≥10 and adoption rate >70% = trusted). This surfaces
+"always recommended but never used" (scenarios too broad) and "should have been built new but treated
+as a config change" bad recommendations.
 
 ---
 

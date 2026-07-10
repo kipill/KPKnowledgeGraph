@@ -145,6 +145,48 @@ tens-to-hundreds-entry catalog is 1-2k tokens; reading it equals semantic search
 server stays deterministic. Two-stage kg_query (fast) + kg_catalog (fallback). Vector search earns
 its complexity only past 500+ entries.
 
+ADR-009 Why reuse recommendation is an "experience layer" and must be human-in-the-loop (v2.4). The
+graph originally indexed only **facts** (where code is, how things link). But one class of problem the
+fact layer can't solve: requesters phrase requests as a **description** ("send the user a notification
+after they place an order"), and without digging in these tend to be built as new features — when an existing configurable
+capability (an enum member) would do the job with a bit of configuration. This calls for the graph to
+do **capability reuse recommendation**.
+
+The key distinction: a recommendation is **experience**, not **fact**. When a fact ("the code is in
+file X") is wrong, the AI reads the code and self-corrects; experience ("this kind of request can
+usually use Y") is probabilistic — it may be a **false friend** (the action matches, but the request
+carries one more qualifier the capability can't be configured for, e.g. "24 hours later" or "only for
+first-time buyers"). If the AI treats experience as fact and executes it directly, it configures a solution
+that looks right but is actually incomplete — and only blows up after release.
+
+Hence three design points:
+
+1. **Separate the experience layer from the fact layer**: a capability catalog carries `scenarios`
+   (for matching) + `reuse_note` (the capability boundary — the dimensions it can't be configured
+   for). On a hit, the AI reads `reuse_note` to judge whether the request carries an out-of-boundary
+   qualifier — **the boundary itself is information** that helps the AI recognize "this one can't be
+   reused," which is the core of guarding against false friends.
+2. **A recommendation never turns into code directly**: `kg_scout_reuse` deliberately **does not
+   return a copy-pasteable config string** — only the capability name + scenarios + boundary, forcing
+   the AI to **relay the conclusion to a human with options**, and only a human decision moves it into
+   implementation. The human decision is the gate that turns "experience reference" into "decision."
+3. **Coarse ranking on the server, fine ranking in the AI** (continuing the ADR-008 division):
+   the server keyword-coarse-ranks name/scenarios/reuse_note and returns the top-k, so the full
+   catalog doesn't drown the AI; the semantic grading (recommend/reference) is left to the AI.
+
+**Why no machine cross-check** (a "parse the source enum and compare" design was once considered):
+field experiments found the AI is highly accurate when it organizes fact fields **while reading the
+code** during development (errors come from "filling quickly from memory"). Adding a source parser for
+a second check guards against a problem that doesn't occur in this workflow, and the parser would be
+language-bound and brittle. Instead: "the AI reads the source and fills + the human confirms + a
+`source` provenance hint for cross-checking," relying on point 2 (a recommendation is a reference, not
+an execution) to backstop the occasional slip in the fact fields.
+
+**Feedback loop**: after a human decides, the outcome (reuse/new/misunderstood) is written back to
+`reuse_feedback.jsonl` and aggregated into an adoption rate with grades. The experience layer is
+therefore **data-driven** — it can surface "always recommended but never used" (scenarios too broad)
+and bad recommendations, and iterate on them, rather than being frozen after one write.
+
 ---
 
 ## 7. What this system deliberately doesn't do
