@@ -9,6 +9,7 @@
 
 - **新增「能力目录 + 复用推荐」经验层**（MINOR，向后兼容，旧图谱无需迁移）。解决一类需求分诊问题：需求方用「描述」提需求（如「玩家上线发个奖励」），若不深挖易被当新功能开发，而其实现成的可配置能力（枚举成员）配一下就能实现。新增 4 个 MCP 工具：
   - `kg_add_capability_catalog`：录入「能力目录」——某个可配置行为的枚举/常量族（成员是行为变体、被 switch/配表消费、需求方用描述而非点名）。承载为 `type=concept` 的 entry + `x_capability_members` 扩展字段。事实字段由 LLM 读源码整理、语义字段（scenarios/reuse_note）起草后经用户确认写入（写入侧人在环里）。
+  - `kg_add_capability_members`：往已有能力目录追加/更新成员（merge 语义：enum_value 已存在→更新覆盖，新的→追加）。用于分批录入大枚举（几十~上百成员）或后续完善 scenarios/reuse_note，返回更新/新增计数。
   - `kg_scout_reuse`：复用推荐分诊闸门。新造能力的需求先查这个，接口对 name/scenarios/reuse_note 做关键词**粗排**返回 top-5 相关成员；LLM 做**精排**（读 reuse_note 判断需求是否含超出能力语义的限定词，分级 recommend/reference），转述给用户并给选项，等人拍板。刻意不返回可照抄配置串，逼人工确认。
   - `kg_report_reuse_outcome`：回写推荐结果（reuse/new/misunderstood）到 `reuse_feedback.jsonl`（遥测）。
   - `kg_get_reuse_stats`：聚合反馈，按成员统计推荐次数/采纳次数/采纳率，按阈值分级（<3 次=待验证 / ≥10 次且采纳率>70%=高置信）。

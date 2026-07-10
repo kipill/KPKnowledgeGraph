@@ -687,6 +687,33 @@ class KG:
                      {"entry_id": catalog_id, "member_count": len(norm)}, reason)
         return self.get_entry(catalog_id)
 
+    def add_capability_members(self, catalog_id, members, reason):
+        """往已有能力目录追加/更新成员（merge 语义）。
+        enum_value 已存在 → 更新覆盖该成员；新的 → 追加。其余成员不动。
+        返回 {updated, added, member_count} 报告发生了什么。"""
+        self._require_reason(reason)
+        entry, domain = self._get_mut(catalog_id)
+        existing = entry.get(CAPABILITY_MEMBERS_FIELD)
+        if not isinstance(existing, list):
+            raise KGError("'%s' 不是能力目录（无 %s 字段），新建用 kg_add_capability_catalog"
+                          % (catalog_id, CAPABILITY_MEMBERS_FIELD))
+        incoming = self._normalize_members(members)
+        by_ev = {m["enum_value"]: i for i, m in enumerate(existing)}
+        updated, added = 0, 0
+        for m in incoming:
+            ev = m["enum_value"]
+            if ev in by_ev:
+                existing[by_ev[ev]] = m
+                updated += 1
+            else:
+                existing.append(m)
+                by_ev[ev] = len(existing) - 1
+                added += 1
+        self._commit(domain, "add_capability_members",
+                     {"entry_id": catalog_id, "updated": updated, "added": added}, reason)
+        return {"catalog_id": catalog_id, "updated": updated, "added": added,
+                "member_count": len(existing)}
+
     @staticmethod
     def _normalize_members(members):
         """校验并规整 members：至少含 enum_value；scenarios 转 list；status 默认 active。"""

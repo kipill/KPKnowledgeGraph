@@ -332,6 +332,39 @@ TOOLS = [
         },
     },
     {
+        "name": "kg_add_capability_members",
+        "description": "往**已存在**的能力目录追加/更新成员（merge 语义）。用于分批录入或补全："
+                       "先录了部分成员、后来补其余，或完善某些成员的 scenarios/reuse_note。"
+                       "enum_value 已存在→更新覆盖该成员；新的→追加；其余成员不动。"
+                       "返回报告更新了几个、新增了几个。新建目录用 kg_add_capability_catalog。"
+                       "同样是写入侧人在环里：整理好 + 用户确认后再调。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "catalog_id": {"type": "string", "description": "目标能力目录 id（必须已存在）"},
+                "members": {
+                    "type": "array",
+                    "description": "要追加/更新的成员，格式同 kg_add_capability_catalog 的 members",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "enum_value": {"type": "string"},
+                            "id": {"type": ["integer", "null"]},
+                            "name": {"type": "string"},
+                            "scenarios": {"type": "array", "items": {"type": "string"}},
+                            "reuse_note": {"type": "string"},
+                            "status": {"type": "string", "enum": ["active", "deprecated"]},
+                        },
+                        "required": ["enum_value"],
+                    },
+                },
+                "reason": REASON_SCHEMA,
+            },
+            "required": ["catalog_id", "members", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "kg_scout_reuse",
         "description": "复用推荐（分诊闸门）：新造能力/加新行为的需求进来时**先调这个**，"
                        "看经验层里有没有现成能力可配，避免重复开发。返回按需求粗排出的 top-k 相关"
@@ -445,6 +478,8 @@ class KgMcpServer:
             return kg.add_capability_catalog(
                 args["domain"], args["catalog_id"], args["name_cn"], args["members"],
                 args["reason"], source=args.get("source"), summary=args.get("summary"))
+        if name == "kg_add_capability_members":
+            return kg.add_capability_members(args["catalog_id"], args["members"], args["reason"])
         if name == "kg_scout_reuse":
             return kg.scout_reuse(args["requirement"], args.get("domain"))
         if name == "kg_report_reuse_outcome":

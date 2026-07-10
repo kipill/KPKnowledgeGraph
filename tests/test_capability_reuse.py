@@ -102,6 +102,39 @@ class WriteTest(unittest.TestCase):
             self.kg.add_capability_catalog("economy", "c", "n",
                                            [{"enum_value": "A"}], "")
 
+    def test_add_members_append_and_update(self):
+        """追加：新成员追加、已存在成员更新覆盖，其余不动。"""
+        _add_reward_catalog(self.kg)  # 4 成员
+        rep = self.kg.add_capability_members("reward_grant_type", [
+            {"enum_value": "PUSH_GRANT", "id": 5, "name": "推送发放", "scenarios": ["推送"]},
+            {"enum_value": "LOGIN_GRANT", "id": 3, "name": "登录时发放",
+             "scenarios": ["登录", "签到", "回归"], "reuse_note": "更新后的边界说明"},
+        ], reason="补录+完善")
+        self.assertEqual(rep["added"], 1)
+        self.assertEqual(rep["updated"], 1)
+        self.assertEqual(rep["member_count"], 5)
+        # 重新加载验证落盘
+        kg2 = KG(self.tmp, self.kg_dir)
+        members = kg2.entries["reward_grant_type"][0]["x_capability_members"]
+        login = next(m for m in members if m["enum_value"] == "LOGIN_GRANT")
+        self.assertIn("回归", login["scenarios"])
+        self.assertEqual(login["reuse_note"], "更新后的边界说明")
+        self.assertTrue(any(m["enum_value"] == "PUSH_GRANT" for m in members))
+
+    def test_add_members_reject_non_catalog(self):
+        """往普通 entry（非能力目录）追加成员应被拒。"""
+        with self.assertRaises(KGError):
+            self.kg.add_capability_members("economy", [{"enum_value": "X"}], "r")
+
+    def test_add_members_reject_unknown_catalog(self):
+        with self.assertRaises(KGError):
+            self.kg.add_capability_members("nosuch", [{"enum_value": "X"}], "r")
+
+    def test_add_members_reject_bad_member(self):
+        _add_reward_catalog(self.kg)
+        with self.assertRaises(KGError):
+            self.kg.add_capability_members("reward_grant_type", [{"name": "无枚举名"}], "r")
+
 
 class ScoutTest(unittest.TestCase):
     def setUp(self):
