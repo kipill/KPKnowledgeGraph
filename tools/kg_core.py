@@ -26,10 +26,20 @@ MAIN_GRAPH_FILE = "graph.json"
 REVERSE_INDEX_FILE = "reverse_index.json"
 CHANGELOG_FILE = "changelog.jsonl"
 QUERYLOG_FILE = "querylog.jsonl"
+REUSE_FEEDBACK_FILE = "reuse_feedback.jsonl"
 ENTRIES_DIR = "entries"
 
 VALID_TYPES = {"system", "feature", "concept"}
 VALID_CONFIDENCE = {"draft", "verified"}
+# 复用推荐反馈的三种决策（D9）
+VALID_REUSE_DECISIONS = {"reuse", "new", "misunderstood"}
+# 能力目录以 entry 的扩展字段承载（x_ 前缀，写入时放行）
+CAPABILITY_MEMBERS_FIELD = "x_capability_members"
+CAPABILITY_SOURCE_FIELD = "x_capability_source"
+# 统计分级阈值（D9）
+REUSE_TIER_MIN_SAMPLES = 3       # 推荐次数 < 此值 = 待验证
+REUSE_TIER_TRUSTED_SAMPLES = 10  # 推荐次数 ≥ 此值且采纳率 > 阈值 = 高置信
+REUSE_TIER_TRUSTED_RATE = 0.7
 ENTRY_REQUIRED_FIELDS = {"type", "name_cn", "doc", "summary", "code"}
 # x_ 前缀为项目自定义扩展字段，写入时放行
 ENTRY_ALLOWED_FIELDS = ENTRY_REQUIRED_FIELDS | {"related", "persistence_pitfalls", "tags"}
@@ -184,8 +194,39 @@ class KG:
             if not entry.get("related") and entry_id not in referenced:
                 r.warn("[%s] 孤儿节点：无出边，也未被引用（可能是新建未连接）" % entry_id)
 
+        for entry_id, (entry, domain) in real.items():
+            self._check_capability_members(entry_id, entry, r)
+
         self._gather_stats(real, r)
         return r
+
+    @staticmethod
+    def _check_capability_members(entry_id, entry, r: ValidationResult):
+        """能力目录结构校验（§7，只做结构，不做源码交叉校验）。"""
+        members = entry.get(CAPABILITY_MEMBERS_FIELD)
+        if members is None:
+            return
+        if not isinstance(members, list) or not members:
+            r.error("[%s].%s 必须是非空数组" % (entry_id, CAPABILITY_MEMBERS_FIELD))
+            return
+        seen = set()
+        for i, m in enumerate(members):
+            if not isinstance(m, dict):
+                r.error("[%s].%s[%d] 必须是对象" % (entry_id, CAPABILITY_MEMBERS_FIELD, i))
+                continue
+            ev = m.get("enum_value")
+            if not ev:
+                r.error("[%s].%s[%d] 缺少 enum_value" % (entry_id, CAPABILITY_MEMBERS_FIELD, i))
+                continue
+            if ev in seen:
+                r.error("[%s] 能力成员 enum_value 重复: '%s'" % (entry_id, ev))
+            seen.add(ev)
+            st = m.get("status", "active")
+            if st not in ("active", "deprecated"):
+                r.error("[%s].%s 的 status 非法: %s" % (entry_id, ev, st))
+            if not (m.get("scenarios") or []):
+                r.add_info("[%s].%s 无 scenarios（不参与复用推荐匹配，建议补语义标签）"
+                           % (entry_id, ev))
 
     @staticmethod
     def _check_entry_structure(entry_id, entry, source, r: ValidationResult):
@@ -391,6 +432,28 @@ class KG:
         self._append_log(QUERYLOG_FILE, record)
         return {"entry_id": entry_id, "accurate": bool(accurate)}
 
+    def report_reuse_outcome(self, requirement, catalog_id, member, decision, note=""):
+        """推荐后人拍板的结果回写（D9）。记录到 reuse_feedback.jsonl，用于统计与迭代。
+        decision ∈ reuse|new|misunderstood。"""
+        if not requirement or not str(requirement).strip():
+            raise KGError("requirement 不能为空：记录这次推荐针对的需求")
+        if catalog_id not in self.entries:
+            raise KGError("catalog 不存在: '%s'" % catalog_id)
+        if decision not in VALID_REUSE_DECISIONS:
+            raise KGError("decision 非法: %s（合法: %s）"
+                          % (decision, sorted(VALID_REUSE_DECISIONS)))
+        if not member or not str(member).strip():
+            raise KGError("member 不能为空：填被推荐的 enum_value")
+        record = {"reuse_feedback": {
+            "requirement": str(requirement).strip(),
+            "catalog_id": catalog_id,
+            "member": str(member).strip(),
+            "decision": decision,
+            "note": str(note or "").strip(),
+        }}
+        self._append_log(REUSE_FEEDBACK_FILE, record)
+        return {"catalog_id": catalog_id, "member": str(member).strip(), "decision": decision}
+
     def stats(self):
         """运营统计：全局汇总 + 每个 entry 的命中/准确反馈/变更历史（来自双日志）。"""
         per = {}
@@ -587,6 +650,200 @@ class KG:
                 self._commit(domain, "verify_edge", {"from": from_id, "to": to_id}, reason)
                 return self.get_entry(from_id)
         raise KGError("边不存在: %s → %s（新建用 kg_add_relation）" % (from_id, to_id))
+
+    # ==================== 能力目录（经验层，D1-D9） ====================
+
+    def add_capability_catalog(self, domain, catalog_id, name_cn, members, reason,
+                               source=None, summary=None):
+        """录入一个能力目录（LLM 分析源码整理 + 人工确认后调用，D1/D6）。
+        承载为 type=concept 的 entry + x_capability_members 扩展字段。
+        members: [{enum_value, id?, name?, scenarios[], reuse_note?, status?}]。
+        source: {file, symbol} 溯源线索（可选，不做机器交叉校验，D2）。"""
+        self._require_reason(reason)
+        if domain not in self.domains:
+            raise KGError("域不存在: '%s'（现有: %s）" % (domain, sorted(self.domains)))
+        if catalog_id in self.entries:
+            raise KGError("catalog_id 已存在: '%s'（在 %s 域）" % (catalog_id, self.entries[catalog_id][1]))
+        norm = self._normalize_members(members)
+        entry = {
+            "type": "concept",
+            "name_cn": name_cn,
+            "doc": "%s/%s.md" % (ENTRIES_DIR, catalog_id),
+            "summary": summary or ("能力目录：%s（可复用行为的枚举成员，供复用推荐）" % name_cn),
+            "code": {},
+            "related": [],
+            "persistence_pitfalls": [],
+            "tags": [domain, "capability_catalog"],
+            CAPABILITY_MEMBERS_FIELD: norm,
+        }
+        if source:
+            if not isinstance(source, dict) or not source.get("file"):
+                raise KGError("source 需为 {file, symbol} 形式")
+            entry[CAPABILITY_SOURCE_FIELD] = {"file": str(source.get("file")),
+                                              "symbol": str(source.get("symbol", ""))}
+        self.domains[domain]["data"].setdefault("entries", {})[catalog_id] = entry
+        self.entries[catalog_id] = (entry, domain)
+        self._commit(domain, "add_capability_catalog",
+                     {"entry_id": catalog_id, "member_count": len(norm)}, reason)
+        return self.get_entry(catalog_id)
+
+    @staticmethod
+    def _normalize_members(members):
+        """校验并规整 members：至少含 enum_value；scenarios 转 list；status 默认 active。"""
+        if not isinstance(members, list) or not members:
+            raise KGError("members 必须是非空数组")
+        out = []
+        seen = set()
+        for i, m in enumerate(members):
+            if not isinstance(m, dict):
+                raise KGError("members[%d] 必须是对象" % i)
+            ev = m.get("enum_value")
+            if not ev or not str(ev).strip():
+                raise KGError("members[%d] 缺少 enum_value" % i)
+            ev = str(ev).strip()
+            if ev in seen:
+                raise KGError("members 里 enum_value 重复: '%s'" % ev)
+            seen.add(ev)
+            scen = m.get("scenarios") or []
+            if not isinstance(scen, list):
+                raise KGError("members[%s].scenarios 必须是数组" % ev)
+            status = m.get("status", "active")
+            if status not in ("active", "deprecated"):
+                raise KGError("members[%s].status 非法: %s（active|deprecated）" % (ev, status))
+            out.append({
+                "enum_value": ev,
+                "id": m.get("id"),
+                "name": str(m.get("name", "")).strip(),
+                "scenarios": [str(s).strip() for s in scen if str(s).strip()],
+                "reuse_note": str(m.get("reuse_note", "")).strip(),
+                "status": status,
+            })
+        return out
+
+    def _iter_catalog_members(self, domain=None):
+        """遍历所有能力目录的 active 成员。yield (catalog_id, catalog_entry, dom, member)。"""
+        for cid, (entry, dom) in self.entries.items():
+            if cid.startswith("_"):
+                continue
+            if domain and dom != domain:
+                continue
+            members = entry.get(CAPABILITY_MEMBERS_FIELD)
+            if not isinstance(members, list):
+                continue
+            for m in members:
+                if isinstance(m, dict) and m.get("status", "active") != "deprecated":
+                    yield cid, entry, dom, m
+
+    def scout_reuse(self, requirement, domain=None, limit=5, log=True):
+        """复用推荐粗排（D4）：对 requirement 在各能力目录成员的 name/scenarios/reuse_note
+        上做关键词匹配，返回 top-k 相关成员（扁平列表，每个带所属 catalog 元信息）。
+        只做粗排，精排（recommend/reference 分级）交给 LLM。已自动过滤 deprecated。"""
+        if not requirement or not str(requirement).strip():
+            raise KGError("requirement 不能为空：填需求描述")
+        if domain and domain not in self.domains:
+            raise KGError("域不存在: '%s'（现有: %s）" % (domain, sorted(self.domains)))
+        req = str(requirement).strip()
+        tokens = self._tokenize(req)
+        scored = []
+        for cid, entry, dom, m in self._iter_catalog_members(domain):
+            score, reason = self._match_member(req, tokens, m)
+            if score > 0:
+                scored.append((score, reason, cid, entry, dom, m))
+        scored.sort(key=lambda x: (-x[0], x[2], x[5].get("enum_value", "")))
+        candidates = []
+        for score, reason, cid, entry, dom, m in scored[:limit]:
+            candidates.append({
+                "catalog_id": cid,
+                "catalog_name": entry.get("name_cn", ""),
+                "domain": dom,
+                "member": {"enum_value": m.get("enum_value"), "id": m.get("id"),
+                           "name": m.get("name", ""), "scenarios": m.get("scenarios", []),
+                           "reuse_note": m.get("reuse_note", "")},
+                "match_reason": reason,
+            })
+        if log:
+            self._append_log(QUERYLOG_FILE, {"scout_reuse": req, "domain": domain,
+                                             "hits": [c["member"]["enum_value"] for c in candidates]})
+        return {"candidates": candidates, "total_matched": len(candidates),
+                "hint": "以上为粗排候选。LLM 精排：读 reuse_note，判断需求是否含超出该能力语义的"
+                        "限定词（方向/时序/计数/条件）；有则降级为 reference 并提示该维度需新增，"
+                        "无则 recommend。转述给用户 + 给选项，等人拍板；勿直接照配（D8）。"}
+
+    @staticmethod
+    def _tokenize(text):
+        """粗粒度分词：抽连续的 CJK/字母/数字片段。CJK 逐字也加入，提高中文召回。"""
+        toks = set()
+        for seg in re.findall(r"[\w一-鿿]+", text.lower()):
+            toks.add(seg)
+            for ch in seg:
+                if "一" <= ch <= "鿿":
+                    toks.add(ch)
+        return toks
+
+    def _match_member(self, req, tokens, m):
+        """给单个成员打分：scenarios 命中权重最高，name 次之，reuse_note 兜底。
+        返回 (score, match_reason)。"""
+        scen = m.get("scenarios", []) or []
+        name = str(m.get("name", ""))
+        note = str(m.get("reuse_note", ""))
+        hit_scen = [s for s in scen if s and (s.lower() in req.lower()
+                                              or any(t in s.lower() for t in tokens))]
+        score = 0
+        score += 3 * len(hit_scen)
+        if name and (name.lower() in req.lower() or any(t in name.lower() for t in tokens)):
+            score += 2
+        note_hits = [t for t in tokens if len(t) > 1 and t in note.lower()]
+        score += min(len(note_hits), 2)
+        reason_parts = []
+        if hit_scen:
+            reason_parts.append("scenarios 命中 %s" % "/".join(hit_scen[:3]))
+        if name and name.lower() in req.lower():
+            reason_parts.append("name 命中'%s'" % name)
+        return score, "；".join(reason_parts) if reason_parts else "弱相关"
+
+    def get_reuse_stats(self, catalog_id=None):
+        """复用推荐运营统计（D9）：聚合 reuse_feedback.jsonl，按 member 汇总
+        推荐次数/采纳次数/采纳率/最近推荐时间，并按阈值分级标注。"""
+        per = {}  # (catalog_id, member) -> counts
+        for rec in self._read_log(REUSE_FEEDBACK_FILE):
+            fb = rec.get("reuse_feedback")
+            if not isinstance(fb, dict):
+                continue
+            cid = fb.get("catalog_id")
+            if catalog_id and cid != catalog_id:
+                continue
+            key = (cid, fb.get("member"))
+            d = per.setdefault(key, {"recommended": 0, "reused": 0, "new": 0,
+                                     "misunderstood": 0, "last_ts": ""})
+            d["recommended"] += 1
+            dec = fb.get("decision")
+            if dec in ("reuse", "new", "misunderstood"):
+                d[dec if dec != "reuse" else "reused"] += 1
+            ts = rec.get("ts", "")
+            if ts > d["last_ts"]:
+                d["last_ts"] = ts
+        members = []
+        for (cid, member), d in sorted(per.items()):
+            rec_n, reuse_n = d["recommended"], d["reused"]
+            rate = round(reuse_n / rec_n, 2) if rec_n else None
+            members.append({
+                "catalog_id": cid, "member": member,
+                "recommended": rec_n, "reused": reuse_n,
+                "new": d["new"], "misunderstood": d["misunderstood"],
+                "reuse_rate": rate, "last_recommended": d["last_ts"],
+                "tier": self._reuse_tier(rec_n, rate),
+            })
+        return {"members": members, "total_feedback": sum(x["recommended"] for x in members)}
+
+    @staticmethod
+    def _reuse_tier(recommended, rate):
+        """分级标注（D9）：样本少=待验证；样本足且采纳率高=高置信；其余=一般。"""
+        if recommended < REUSE_TIER_MIN_SAMPLES:
+            return "待验证"
+        if recommended >= REUSE_TIER_TRUSTED_SAMPLES and rate is not None \
+                and rate > REUSE_TIER_TRUSTED_RATE:
+            return "高置信"
+        return "一般"
 
     # ==================== 内部：提交 ====================
 

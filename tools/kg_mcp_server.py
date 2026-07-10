@@ -283,6 +283,108 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "kg_add_capability_catalog",
+        "description": "录入一个'能力目录'（经验层）——某个可配置行为的枚举/常量族，"
+                       "每个成员是一种现成能力（如奖励发放方式、通知触发方式、任务条件类型）。"
+                       "用于后续复用推荐（kg_scout_reuse），避免把'配一下就能实现'的需求当新功能开发。"
+                       "何时用（三条同时满足）：① 成员是行为变体，非纯数据标签；"
+                       "② 被 switch/配表/注册表消费；③ 需求方用'描述'提需求而非点枚举名。"
+                       "流程：你（LLM）读源码整理成员的事实字段(enum_value/id/name)+起草语义字段"
+                       "(scenarios/reuse_note)，缺口处给用户选项，**经用户确认后**再调此工具写入。"
+                       "reuse_note 要写清该能力的'边界'（配不出来的维度，如'无方向/无连续天数'），"
+                       "这是防止误推荐的关键。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "所属域，必须已存在"},
+                "catalog_id": {"type": "string", "description": "英文小写下划线 id，如 reward_grant_type"},
+                "name_cn": {"type": "string", "description": "中文名，如'奖励发放方式'"},
+                "summary": {"type": "string", "description": "可选，一句话说明这个目录是什么"},
+                "source": {
+                    "type": "object",
+                    "description": "溯源线索（可选）：枚举所在文件与符号名，便于人工核对。不做机器交叉校验。",
+                    "properties": {"file": {"type": "string"}, "symbol": {"type": "string"}},
+                },
+                "members": {
+                    "type": "array",
+                    "description": "能力成员列表，至少一个",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "enum_value": {"type": "string", "description": "枚举值/常量名（必填）"},
+                            "id": {"type": ["integer", "null"], "description": "数值 id（可选）"},
+                            "name": {"type": "string", "description": "中文名/说明"},
+                            "scenarios": {"type": "array", "items": {"type": "string"},
+                                          "description": "适用场景关键词，供粗排匹配（如 登录/减伤/发放）"},
+                            "reuse_note": {"type": "string",
+                                           "description": "复用边界：这个能力配不出来的维度/限制，防误推荐"},
+                            "status": {"type": "string", "enum": ["active", "deprecated"],
+                                       "description": "默认 active；deprecated 不参与推荐"},
+                        },
+                        "required": ["enum_value"],
+                    },
+                },
+                "reason": REASON_SCHEMA,
+            },
+            "required": ["domain", "catalog_id", "name_cn", "members", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kg_scout_reuse",
+        "description": "复用推荐（分诊闸门）：新造能力/加新行为的需求进来时**先调这个**，"
+                       "看经验层里有没有现成能力可配，避免重复开发。返回按需求粗排出的 top-k 相关"
+                       "能力成员（扁平列表，每个带所属目录）。这是**粗排**，你要做**精排**：读每个候选的"
+                       "reuse_note，判断需求是否含超出该能力语义的限定词（方向/时序/计数/条件）——"
+                       "有则该候选降为'参考'并提示那个维度需新增，无则'可复用推荐'。"
+                       "**必须把结论转述给用户并给选项（复用/新增/理解错了），等用户拍板**，"
+                       "不要直接照着推荐写代码（不返回可照抄配置串是刻意的）。"
+                       "用户拍板后调 kg_report_reuse_outcome 记录结果。"
+                       "例外：用户已点名具体机制时跳过本工具。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "requirement": {"type": "string", "description": "需求描述（自然语言），如'玩家连续登录7天发奖励'"},
+                "domain": {"type": "string", "description": "可选，限定某个域缩小范围（推荐先判域再查）"},
+            },
+            "required": ["requirement"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kg_report_reuse_outcome",
+        "description": "回写复用推荐的结果（遥测，进 reuse_feedback.jsonl，无需 reason/确认）。"
+                       "kg_scout_reuse 推荐后、用户拍板了，调此工具记一笔：用户选了复用(reuse)/"
+                       "当新功能开发(new)/需求被理解错了(misunderstood)。数据用于统计采纳率、"
+                       "发现误推荐、迭代 scenarios 质量。每次推荐拍板后记一次。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "requirement": {"type": "string", "description": "这次推荐针对的需求描述"},
+                "catalog_id": {"type": "string", "description": "命中能力所属目录 id"},
+                "member": {"type": "string", "description": "被推荐的成员 enum_value"},
+                "decision": {"type": "string", "enum": ["reuse", "new", "misunderstood"],
+                             "description": "用户拍板结果"},
+                "note": {"type": "string", "description": "可选，补充说明（如'复用发放触发，计数新增'）"},
+            },
+            "required": ["requirement", "catalog_id", "member", "decision"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "kg_get_reuse_stats",
+        "description": "复用推荐运营统计：聚合 reuse_feedback，返回每个能力成员的推荐次数/采纳次数/"
+                       "采纳率/最近推荐时间，并按阈值分级（推荐<3次=待验证 / ≥10次且采纳率>70%=高置信）。"
+                       "用于评估经验层质量：哪些能力常被成功复用、哪些总被推却没人用（scenarios 可能太宽）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "catalog_id": {"type": "string", "description": "可选，限定某个目录；不填返回全局"},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -339,6 +441,17 @@ class KgMcpServer:
         if name == "kg_add_cross_relation":
             return kg.add_cross_relation(args["from_domain"], args["to_domain"],
                                          args["context"], args["confidence"], args["reason"])
+        if name == "kg_add_capability_catalog":
+            return kg.add_capability_catalog(
+                args["domain"], args["catalog_id"], args["name_cn"], args["members"],
+                args["reason"], source=args.get("source"), summary=args.get("summary"))
+        if name == "kg_scout_reuse":
+            return kg.scout_reuse(args["requirement"], args.get("domain"))
+        if name == "kg_report_reuse_outcome":
+            return kg.report_reuse_outcome(args["requirement"], args["catalog_id"],
+                                           args["member"], args["decision"], args.get("note", ""))
+        if name == "kg_get_reuse_stats":
+            return kg.get_reuse_stats(args.get("catalog_id"))
         raise KGError("未知工具: %s" % name)
 
     # ==================== JSON-RPC over stdio ====================

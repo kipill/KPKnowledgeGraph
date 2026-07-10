@@ -5,6 +5,16 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.4.0 — 2026-07-10
+
+- **新增「能力目录 + 复用推荐」经验层**（MINOR，向后兼容，旧图谱无需迁移）。解决一类需求分诊问题：需求方用「描述」提需求（如「玩家上线发个奖励」），若不深挖易被当新功能开发，而其实现成的可配置能力（枚举成员）配一下就能实现。新增 4 个 MCP 工具：
+  - `kg_add_capability_catalog`：录入「能力目录」——某个可配置行为的枚举/常量族（成员是行为变体、被 switch/配表消费、需求方用描述而非点名）。承载为 `type=concept` 的 entry + `x_capability_members` 扩展字段。事实字段由 LLM 读源码整理、语义字段（scenarios/reuse_note）起草后经用户确认写入（写入侧人在环里）。
+  - `kg_scout_reuse`：复用推荐分诊闸门。新造能力的需求先查这个，接口对 name/scenarios/reuse_note 做关键词**粗排**返回 top-5 相关成员；LLM 做**精排**（读 reuse_note 判断需求是否含超出能力语义的限定词，分级 recommend/reference），转述给用户并给选项，等人拍板。刻意不返回可照抄配置串，逼人工确认。
+  - `kg_report_reuse_outcome`：回写推荐结果（reuse/new/misunderstood）到 `reuse_feedback.jsonl`（遥测）。
+  - `kg_get_reuse_stats`：聚合反馈，按成员统计推荐次数/采纳次数/采纳率，按阈值分级（<3 次=待验证 / ≥10 次且采纳率>70%=高置信）。
+- `kg-consult` skill 增加「复用推荐（分诊闸门）」步骤，前置于事实查询。
+- `validate.py`/`kg_validate` 增加能力目录结构校验（enum_value 必填/去重、status 合法、无 scenarios 提示；不做源码交叉校验）。
+
 ## 2.3.5 — 2026-07-04
 
 - 修复 `kg_guard_hook` 在子目录下崩溃：hook 此前注册成相对路径 `python -X utf8 .claude/kg/tools/kg_guard_hook.py`，而 Claude Code 跑 hook 时 cwd 是**会话当前目录**——一旦 `cd` 进子目录（如 `backend/`），相对路径解析不到脚本，Python 退出码非 0 被 Claude Code 当作拦截，脚本内部的 fail-open 根本没机会执行（报错 `can't open file ... kg_guard_hook.py`）。改为 **exec 形式 + `${CLAUDE_PROJECT_DIR}`**：Claude Code 自己把占位符替换成项目根绝对路径再 spawn，不依赖 shell 变量展开，Windows（PowerShell/Git Bash）与 Unix 通用。`install.py` 改为幂等：检测到旧的相对路径形式会原地升级，**受影响用户重跑 `install.py` 即修复**（`kg_admin update` 按契约不碰 settings.json）。

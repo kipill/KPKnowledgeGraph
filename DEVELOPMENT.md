@@ -70,6 +70,10 @@
 | `kg_add_domain` | 新建域 | 初始化用 |
 | `kg_add_cross_relation` | 域级关联 | 初始化用 |
 | `kg_feedback` | 回报 entry 信息准确性 | 遥测进 querylog，不改图谱，无需 reason/确认 |
+| `kg_add_capability_catalog` | 录入能力目录（经验层） | 可配置行为的枚举族，供复用推荐；写入侧人在环里 |
+| `kg_scout_reuse` | 复用推荐（分诊闸门） | 新造能力前查有无现成能力可配；接口粗排、LLM 精排 |
+| `kg_report_reuse_outcome` | 回写推荐结果 | 遥测进 reuse_feedback.jsonl，无需 reason/确认 |
+| `kg_get_reuse_stats` | 复用推荐统计 | 采纳率、分级（待验证/一般/高置信） |
 
 **所有写工具必填 `reason`**：一句话说明触发原因（哪个任务/验证了什么/发现了什么），
 写入 changelog。"更新图谱"这种敷衍的 reason 应该被 review 打回。
@@ -87,6 +91,38 @@
 
 人工批量修复时：设环境变量 `KG_ALLOW_DIRECT_EDIT=1` 绕过 hook 直接改文件，
 改完**必须**跑 `validate.py` + `build_reverse_index.py`。
+
+---
+
+## 2.5 能力目录与复用推荐（经验层，v2.4.0+）
+
+图谱有两个正交方向，别混淆：
+
+| 方向 | 事实查询（kg_query 等） | 复用推荐（kg_scout_reuse） |
+|------|------------------------|---------------------------|
+| 触发 | 任何要碰代码时 | 只在「造新能力/加新行为」时 |
+| 消费者 | LLM 直接用 | **人**来判断（LLM 转述） |
+| 性质 | 事实（代码在哪） | 经验（这类需求通常能用 X） |
+| 错了的后果 | 走错文件，自纠 | 若被直接执行→残缺方案上线 |
+
+**能力目录**（capability catalog）= 某个「可配置行为的枚举/常量族」，每个成员是一种
+现成能力（奖励发放方式、通知触发方式、任务条件类型……）。判定三条同时满足：
+① 成员是行为变体，非纯数据标签；② 被 switch/配表/注册表消费；③ 需求方用「描述」提需求
+而非点枚举名。反例（属事实层，不进经验层）：伤害类型、消息协议枚举等纯数据标签。
+
+**存储**：承载为 `type=concept` 的 entry + `x_capability_members` 扩展字段。每个 member：
+`{enum_value（必填）, id?, name?, scenarios[], reuse_note?, status?}`。
+`scenarios` 供粗排匹配；`reuse_note` 写清**能力边界**（配不出来的维度，如「无方向/无连续天数」），
+是防误推荐的关键。`status=deprecated` 的成员不参与推荐。
+
+**两侧都人在环里**：
+- 写入侧：LLM 读源码整理事实字段 + 起草语义字段 → **用户确认** → `kg_add_capability_catalog`。
+- 推荐侧：`kg_scout_reuse` 粗排 → LLM 精排分级 → **转述给用户 + 给选项** → 用户拍板 →
+  `kg_report_reuse_outcome` 记反馈。接口刻意不返回可照抄配置串，逼人工确认。
+
+**反馈闭环**：`reuse_feedback.jsonl` 记录每次推荐的决策（reuse/new/misunderstood），
+`kg_get_reuse_stats` 聚合成采纳率并分级（推荐<3 次=待验证 / ≥10 次且采纳率>70%=高置信）。
+用于发现「总被推却没人用」（scenarios 太宽）和「该新增却被当配表」的误推荐。
 
 ---
 
