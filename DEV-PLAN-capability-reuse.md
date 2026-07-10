@@ -145,15 +145,19 @@ LLM 再走方向 A（kg_query + 读代码）去实现。推荐工具的返回形
 - bump VERSION=2.4.0；CHANGELOG 顶部加条目(MINOR：新增 3 工具 + 反馈机制，旧图谱兼容)
 - commit + tag v2.4.0 + push
 
-**第二批:可视化增强（后补，不阻塞上线）**
+**第二批:可视化增强（已完成 ✅）**
 
-### Phase 3：kg-view 可视化扩展
-- `gen_graph_html.py` 扩展：能力目录渲染成节点(type=capability_catalog,菱形/特殊色)
-- `graph_view.html` 模板扩展：
-  - 节点样式区分(能力目录 vs 普通 entry)
-  - 点击能力目录 → 侧边栏显示:基本信息 + members 列表(每个带统计徽章:推荐 X 次|复用 Y 次|Z% 采纳率) + 最近 5 条 feedback
+### Phase 3：kg-view 可视化扩展 ✅
+- `gen_graph_html.py` 扩展（已完成）：
+  - `load_data` 识别能力目录（有 `x_capability_members`）→ type=capability_catalog，
+    合并 `get_reuse_stats` 的复用统计到每个成员
+  - 前端：能力目录渲染成**金边菱形**节点（区别于普通 entry）
+  - 点击能力目录 → 详情面板显示：来源枚举 + 成员列表，每个成员带
+    **统计徽章**(推荐 X · 复用 Y · 采纳率 Z% + 分级 待验证/一般/高置信)、
+    reuse_note 边界警告、scenarios 标签；deprecated 成员置底半透明标注
 - 能力目录通过 `related` 字段**手动关联**到 entry(先看效果,不行再改自动)
-- **验收**：有能力目录 + feedback 后打开 graph_view.html → 看到能力目录节点 → 点击显示统计
+- **验收 ✅**：VizTest 2 例——load_data 输出能力目录节点+成员统计正确、
+  静态 HTML 含全部标记；高置信/deprecated 排序验证通过
 
 ---
 

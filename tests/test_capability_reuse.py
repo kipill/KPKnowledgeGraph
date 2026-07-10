@@ -283,6 +283,47 @@ class McpStdioTest(unittest.TestCase):
         self.assertIn("连续", scout_text)  # reuse_note 边界警告已带出
 
 
+class VizTest(unittest.TestCase):
+    """Phase 3 可视化：能力目录节点数据 + 静态 HTML 生成。"""
+
+    def setUp(self):
+        self.tmp, self.kg_dir, self.kg = _make_kg()
+        _add_reward_catalog(self.kg)
+        # 造反馈让 MAIL_GRANT 达高置信
+        for _ in range(10):
+            self.kg.report_reuse_outcome("a", "reward_grant_type", "MAIL_GRANT", "reuse")
+        for _ in range(2):
+            self.kg.report_reuse_outcome("b", "reward_grant_type", "MAIL_GRANT", "new")
+        import gen_graph_html
+        self.g = gen_graph_html
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_catalog_node_and_members(self):
+        data = self.g.load_data(self.kg.kg_dir, self.kg.stats()["per_entry"],
+                                self.kg.get_reuse_stats())
+        cat = next(n for n in data["nodes"] if n["type"] == "capability_catalog")
+        self.assertEqual(cat["id"], "reward_grant_type")
+        self.assertEqual(len(cat["members"]), 4)
+        # 高置信统计正确带入
+        mail = next(m for m in cat["members"] if m["enum_value"] == "MAIL_GRANT")
+        self.assertEqual(mail["tier"], "高置信")
+        self.assertEqual(mail["recommended"], 12)
+        # deprecated 成员排最后
+        self.assertEqual(cat["members"][-1]["status"], "deprecated")
+        # 溯源
+        self.assertEqual(cat["source"]["symbol"], "RewardGrantType")
+
+    def test_static_html_markers(self):
+        out = self.kg_dir / "graph_view.html"
+        rc = self.g.gen_static(self.tmp, self.kg_dir, out)
+        self.assertEqual(rc, 0)
+        html = out.read_text("utf-8")
+        for marker in ("capability_catalog", "t-高置信", "能力成员", "mem-note"):
+            self.assertIn(marker, html)
+
+
 # <APPEND-TESTS>
 
 
