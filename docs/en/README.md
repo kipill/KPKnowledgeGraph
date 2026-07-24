@@ -67,6 +67,7 @@ That's what KPKnowledgeGraph is after: **turning "human experience" into "the AI
 ```
 
 The installer creates the graph directory, tools, skill, and commands, and auto-merges the MCP server registration — **idempotent, never overwrites existing config.**
+**Claude Code / Codex / Cursor are all set up at once**: each tool's MCP config and trigger convention are written by the installer (see "Works across three tools" below).
 
 ---
 
@@ -161,7 +162,21 @@ python .claude/kg/tools/kg_admin.py update
 
 For full usage, schema, and MCP tool details see [DEVELOPMENT.md](./DEVELOPMENT.md).
 
-> **Works with both Claude Code and Codex** — pure Python standard library, zero third-party deps. Codex users just register the MCP server in `~/.codex/config.toml` (see [DEVELOPMENT.md](./DEVELOPMENT.md) §8.1) and state in `AGENTS.md` that "all graph reads/writes go through the kg_* tools."
+> **Works across three tools: Claude Code / Codex / Cursor, out of the box** — pure Python standard
+> library, zero third-party deps. The graph's truly tool-agnostic entry point is **MCP** (all three
+> support it), and the installer lays down "the same MCP + the same trigger convention" in whatever
+> file each tool recognizes:
+> - **Claude Code**: `.mcp.json` + `.claude/skills/` (skill auto-activates) + a PreToolUse hook
+>   (hard-blocks direct edits to the graph)
+> - **Codex**: the `[mcp_servers.kg]` table in `.codex/config.toml` + project-root `AGENTS.md`
+>   (read every session)
+> - **Cursor**: `.cursor/mcp.json` + `.cursor/rules/kg.mdc` (`alwaysApply`, auto-injected)
+>
+> Existing projects get the Codex/Cursor config filled in automatically on `kg_admin update` (only
+> what's missing, never overwriting what's there).
+> ⚠ Codex/Cursor have no hook mechanism, so "don't edit `graph*.json` directly" rests on the textual
+> convention in `AGENTS.md` / cursor rules there; the hard guarantee of graph consistency still holds
+> only under Claude Code + the hook.
 
 ---
 

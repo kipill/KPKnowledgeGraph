@@ -452,7 +452,7 @@ changelog 记录了 update 操作的 before 值，必要时可以精确回滚单
 {"mcpServers": {"kg": {"command": "python", "args": ["-X", "utf8", ".claude/kg/tools/kg_mcp_server.py"]}}}
 ```
 
-**Codex**（`~/.codex/config.toml`）：
+**Codex**（项目级 `.codex/config.toml`，安装器自动配置）：
 
 ```toml
 [mcp_servers.kg]
@@ -460,8 +460,31 @@ command = "python"
 args = ["-X", "utf8", ".claude/kg/tools/kg_mcp_server.py"]
 ```
 
+> Codex 首次遇到项目级 `.codex/config.toml` 会提示信任（trust）才加载其中的 MCP。
+> 安装器**不代写 `trust_level`**（其 semantics 随版本/全局配置而异，误写有害），
+> 安装时打印提示，用户按 Codex 引导确认即可。
+
+**Cursor**（项目级 `.cursor/mcp.json`，安装器自动配置，结构同 `.mcp.json`）：
+
+```json
+{"mcpServers": {"kg": {"command": "python", "args": ["-X", "utf8", ".claude/kg/tools/kg_mcp_server.py"]}}}
+```
+
 server 以启动时的 cwd 为项目根（`--root` 可覆盖），自动探测图谱目录。
 每次工具调用重新加载图谱文件，外部改动（git pull）无需重启。
+
+**触发约定的载体**（何时先查图谱、写图谱只走 MCP 等规则，单点维护于 `templates/`）：
+
+| 工具 | MCP 配置 | 触发约定 | 强制防改图谱 |
+|---|---|---|---|
+| Claude Code | `.mcp.json` | `.claude/skills/`（自动激活） | ✅ PreToolUse hook |
+| Codex | `.codex/config.toml` | `AGENTS.md`（`templates/AGENTS.kg.md`，标记段合并） | ❌ 靠文字约定 |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/kg.mdc`（`templates/cursor-kg.mdc`，`alwaysApply`） | ❌ 靠文字约定 |
+
+安装器写这些配置全部「合并/不覆盖 + 幂等」：已存在的 MCP server 一律跳过；`AGENTS.md` 用
+`<!-- KG:BEGIN -->`/`<!-- KG:END -->` 标记整段管理（重跑整段替换，标记外用户内容不动）。TOML
+用几行手写序列化（守零依赖，不引入 TOML 写库），生成结果经 `tomllib` 验证合法。`kg_admin update`
+也会**补缺失**：老项目升级自动拿到 Codex/Cursor 配置，但只补尚不存在的项。
 
 ### 8.2 kg_guard_hook.py（防漂移 hook，Claude Code 专用）
 

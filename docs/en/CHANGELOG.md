@@ -6,6 +6,40 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.5.0 - 2026-07-24
+
+- **Cross–AI-tool support: kg now installs for Codex / Cursor too** (MINOR, backward compatible,
+  pure addition; existing projects pick it up via `kg_admin update`). Until now kg's trigger
+  convention existed only as Claude Code's private skill / slash-command formats, which neither
+  Codex nor Cursor parse — but the graph's truly tool-agnostic "gateway" is **MCP**, which all three
+  tools support. This release lays down "the same MCP + the same trigger convention" in whatever
+  file each tool recognizes:
+  - **Codex**: `install.py` writes the `[mcp_servers.kg]` table into project-level
+    `.codex/config.toml`; the trigger convention is merged into the project-root `AGENTS.md` (Codex
+    reads it every session). The TOML is emitted with a few lines of hand-rolled serialization — no
+    third-party TOML writer (keeps the zero-dependency rule); the result is validated with `tomllib`.
+    Codex prompts for project trust before loading project-level MCP the first time — this release
+    does **not** write `trust_level` for you (its semantics vary by version/global config, so writing
+    it blindly is harmful); instead the installer prints a note to confirm trust when Codex asks.
+  - **Cursor**: writes project-level `.cursor/mcp.json` (same `mcpServers.kg` shape as `.mcp.json`);
+    the trigger convention deploys to `.cursor/rules/kg.mdc` (`alwaysApply: true`, auto-injected by
+    Cursor).
+  - Single-source trigger convention: adds `templates/AGENTS.kg.md` and `templates/cursor-kg.mdc`, a
+    condensed version of the `kg-consult` skill (when to consult the graph first, how to query, writes
+    go only through MCP, `kg_feedback` after a task) — three carriers, one source.
+  - Everything is "merge / never-overwrite + idempotent": an existing MCP server is always skipped
+    (never overwrites your config or your other servers); `AGENTS.md` is managed as a marked block
+    (`<!-- KG:BEGIN -->` / `<!-- KG:END -->`), replaced as a whole on re-run rather than appended
+    again, leaving your content outside the markers untouched.
+  - `kg_admin update` (`install.py --refresh-tools`) **backfills** too: existing projects get the
+    Codex/Cursor config on upgrade, but again only what's missing — it touches no existing config,
+    consistent with the original "update never overwrites user config" contract, just widened to
+    "fill in the gaps".
+- ⚠ **Known asymmetry**: Codex/Cursor have no PreToolUse hook like Claude Code's, so direct edits to
+  `graph*.json` cannot be hard-blocked there — "don't edit the graph directly" rests only on the
+  textual convention in `AGENTS.md` / cursor rules (written as an explicit warning in the generated
+  files). The hard guarantee of graph consistency still holds only under Claude Code + the hook.
+
 ## 2.4.0 - 2026-07-10
 
 - **Added the "capability catalog + reuse recommendation" experience layer** (MINOR, backward

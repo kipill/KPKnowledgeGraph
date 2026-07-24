@@ -259,9 +259,21 @@ grep '"guild"' .claude/kg/querylog.jsonl                # was it ever used?
 ## 8. Tool reference
 
 ### 8.1 kg_mcp_server.py (MCP server)
-Pure-stdlib stdio. Claude Code (.mcp.json): {"mcpServers":{"kg":{"command":"python","args":["-X","utf8",".claude/kg/tools/kg_mcp_server.py"]}}}.
-Codex (~/.codex/config.toml): [mcp_servers.kg] command="python" args=["-X","utf8",".claude/kg/tools/kg_mcp_server.py"].
+Pure-stdlib stdio. All three tools are auto-configured by the installer (merge / never-overwrite / idempotent):
+Claude Code (.mcp.json): {"mcpServers":{"kg":{"command":"python","args":["-X","utf8",".claude/kg/tools/kg_mcp_server.py"]}}}.
+Codex (project-level .codex/config.toml): [mcp_servers.kg] command="python" args=["-X","utf8",".claude/kg/tools/kg_mcp_server.py"] — the installer does **not** write `trust_level` (semantics vary by version/global config); Codex prompts for project trust on first load, confirm as directed.
+Cursor (project-level .cursor/mcp.json): same mcpServers.kg shape as .mcp.json.
 Reloads graph files per call; external changes (git pull) need no restart.
+
+**Trigger-convention carriers** (when to consult the graph first, writes only via MCP, etc.; single-sourced under `templates/`):
+
+| Tool | MCP config | Trigger convention | Hard graph-edit block |
+|---|---|---|---|
+| Claude Code | `.mcp.json` | `.claude/skills/` (auto-activates) | ✅ PreToolUse hook |
+| Codex | `.codex/config.toml` | `AGENTS.md` (`templates/AGENTS.kg.md`, marked block merge) | ❌ textual convention only |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/kg.mdc` (`templates/cursor-kg.mdc`, `alwaysApply`) | ❌ textual convention only |
+
+The installer writes all of these with merge/never-overwrite + idempotency: existing MCP servers are skipped; `AGENTS.md` is managed as a `<!-- KG:BEGIN -->`/`<!-- KG:END -->` block (whole-block replace on re-run, user content outside untouched). TOML is emitted with a few lines of hand-rolled serialization (zero-dep, no TOML writer) and validated with `tomllib`. `kg_admin update` **backfills** too: existing projects get the Codex/Cursor config on upgrade, only what's missing.
 
 ### 8.2 kg_guard_hook.py (drift-proof hook, Claude Code only)
 PreToolUse, auto-registered to .claude/settings.json in **exec form** with the `${CLAUDE_PROJECT_DIR}`

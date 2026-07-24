@@ -67,6 +67,7 @@
 ```
 
 安装器会创建图谱目录、工具、skill、命令，并自动合并 MCP server 注册——**幂等，不覆盖已有配置**。
+**Claude Code / Codex / Cursor 一并铺好**：三个工具各自的 MCP 配置和触发约定都由安装器写入（详见下方「三工具通用」）。
 
 ---
 
@@ -165,9 +166,16 @@ python .claude/kg/tools/kg_admin.py update
 
 详细用法、schema、MCP 工具说明见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
-> **Claude Code 与 Codex 都能用**，纯 Python 标准库、零第三方依赖。Codex 用户在
-> `~/.codex/config.toml` 注册 MCP server 即可（配置见 [DEVELOPMENT.md](./DEVELOPMENT.md) §8.1），
-> 并在 `AGENTS.md` 约定"图谱读写一律走 kg_* 工具"。
+> **三工具通用：Claude Code / Codex / Cursor 开箱即用**，纯 Python 标准库、零第三方依赖。
+> 图谱真正工具无关的出入口是 **MCP**（三者都支持），安装器会把「同一套 MCP + 同一套触发约定」
+> 铺到每个工具各自认的文件：
+> - **Claude Code**：`.mcp.json` + `.claude/skills/`（skill 自动激活）+ PreToolUse hook（强制防直接改图谱）
+> - **Codex**：`.codex/config.toml` 的 `[mcp_servers.kg]` + 项目根 `AGENTS.md`（每会话自动读）
+> - **Cursor**：`.cursor/mcp.json` + `.cursor/rules/kg.mdc`（`alwaysApply` 自动注入）
+>
+> 老项目跑 `kg_admin update` 会自动补齐 Codex/Cursor 配置（只补缺失，不覆盖已有）。
+> ⚠ Codex/Cursor 没有 hook 机制，「禁止直接改 `graph*.json`」在那里靠 `AGENTS.md` / cursor rules
+> 的文字约定自律；图谱一致性的硬保证仍只在 Claude Code + hook 下成立。
 
 ---
 

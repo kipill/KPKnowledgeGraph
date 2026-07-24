@@ -5,6 +5,16 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.5.0 — 2026-07-24
+
+- **跨 AI 工具支持：Codex / Cursor 一并铺好 kg**（MINOR，向后兼容，纯新增，旧项目 `kg_admin update` 即可补齐）。此前 kg 的触发约定只以 Claude Code 私有的 skill / 斜杠命令形式存在，Codex 与 Cursor 都不解析这些格式——它们能用的是图谱真正工具无关的「网关」：**MCP**（三个工具都支持）。本版把「同一套 MCP + 同一套触发约定」铺到每个工具各自认的载体：
+  - **Codex**：`install.py` 写入项目级 `.codex/config.toml` 的 `[mcp_servers.kg]` 表；触发约定合并进项目根 `AGENTS.md`（Codex 每会话自动读）。TOML 用几行手写序列化，不引入第三方 TOML 写库（守零依赖）；生成结果经 `tomllib` 验证合法。首次在项目中会由 Codex 提示信任（trust）才加载项目级 MCP——本版不代写 `trust_level`（其 semantics 因版本/全局配置而异，误写有害），改为安装时打印提示让用户按 Codex 引导确认。
+  - **Cursor**：写入项目级 `.cursor/mcp.json`（结构与 `.mcp.json` 相同的 `mcpServers.kg`）；触发约定部署为 `.cursor/rules/kg.mdc`（`alwaysApply: true`，Cursor 自动注入）。
+  - 触发约定单点维护：新增 `templates/AGENTS.kg.md` 与 `templates/cursor-kg.mdc`，内容是 `kg-consult` skill 的凝缩版（何时先查图谱、怎么查、写图谱只走 MCP、任务后 kg_feedback），三处载体同源。
+  - 全部「合并 / 不覆盖 + 幂等」：已存在的 MCP server 一律跳过（绝不覆盖用户配置或用户已有的其它 server）；`AGENTS.md` 用 `<!-- KG:BEGIN -->` / `<!-- KG:END -->` 标记整段管理，重跑整段替换而非重复追加，标记外的用户内容不动。
+  - `kg_admin update`（`install.py --refresh-tools`）也会**补缺失**：老项目升级后自动拿到 Codex/Cursor 配置，但同样只补尚不存在的项，不碰任何已有配置——与原有「update 不覆盖用户配置」的契约一致，只是范围扩到「补齐」。
+- ⚠ **已知非对称**：Codex/Cursor 没有 Claude Code 的 PreToolUse hook 机制，无法强制拦截对 `graph*.json` 的直接编辑——那里「禁止直接改图谱」只能靠 `AGENTS.md` / cursor rules 的文字约定自律（生成物中已写成显式警告）。图谱一致性的硬保证仍只在 Claude Code + hook 环境下成立。
+
 ## 2.4.0 — 2026-07-10
 
 - **新增「能力目录 + 复用推荐」经验层**（MINOR，向后兼容，旧图谱无需迁移）。解决一类需求分诊问题：需求方用「描述」提需求（如「玩家上线发个奖励」），若不深挖易被当新功能开发，而其实现成的可配置能力（枚举成员）配一下就能实现。新增 4 个 MCP 工具：
