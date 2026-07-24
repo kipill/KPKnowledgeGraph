@@ -168,8 +168,9 @@ For full usage, schema, and MCP tool details see [DEVELOPMENT.md](./DEVELOPMENT.
 > file each tool recognizes:
 > - **Claude Code**: `.mcp.json` + `.claude/skills/` (skill auto-activates) + a PreToolUse hook
 >   (hard-blocks direct edits to the graph)
-> - **Codex**: the `[mcp_servers.kg]` table in `.codex/config.toml` + project-root `AGENTS.md`
->   (read every session)
+> - **Codex**: the `[mcp_servers.kg]` table in `.codex/config.toml` +
+>   `.agents/skills/kg-consult/SKILL.md` (same skill source as Claude, loaded on demand by Codex) +
+>   a one-line pointer in `AGENTS.md`
 > - **Cursor**: `.cursor/mcp.json` + `.cursor/rules/kg.mdc` (`alwaysApply`, auto-injected)
 >
 > Existing projects get the Codex/Cursor config filled in automatically on `kg_admin update` (only

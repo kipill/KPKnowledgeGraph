@@ -170,7 +170,7 @@ python .claude/kg/tools/kg_admin.py update
 > 图谱真正工具无关的出入口是 **MCP**（三者都支持），安装器会把「同一套 MCP + 同一套触发约定」
 > 铺到每个工具各自认的文件：
 > - **Claude Code**：`.mcp.json` + `.claude/skills/`（skill 自动激活）+ PreToolUse hook（强制防直接改图谱）
-> - **Codex**：`.codex/config.toml` 的 `[mcp_servers.kg]` + 项目根 `AGENTS.md`（每会话自动读）
+> - **Codex**：`.codex/config.toml` 的 `[mcp_servers.kg]` + `.agents/skills/kg-consult/SKILL.md`（与 Claude 同源 skill，Codex 按需自动加载）+ `AGENTS.md` 一行指针
 > - **Cursor**：`.cursor/mcp.json` + `.cursor/rules/kg.mdc`（`alwaysApply` 自动注入）
 >
 > 老项目跑 `kg_admin update` 会自动补齐 Codex/Cursor 配置（只补缺失，不覆盖已有）。

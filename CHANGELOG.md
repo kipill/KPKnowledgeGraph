@@ -5,6 +5,13 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.5.1 — 2026-07-24
+
+- **Codex 触发约定从 `AGENTS.md` 升级为真正的 skill**（PATCH，接续 2.5.0）。经在 Codex CLI 0.144.6 实测确认：Codex 支持 `SKILL.md` 开放标准（与 Claude Code 同一套），仓库级 skill 从 cwd 向上扫描 `.agents/skills/` 到 repo 根。因此本版把 Codex 的 kg 使用约定从「AGENTS.md 常驻段」改为部署 `.agents/skills/kg-consult/SKILL.md` + `.agents/skills/kg-view/SKILL.md`——**与 Claude Code 的 skill 同源**（都来自 `skills/*.skill.md`），一份内容多工具复用，且 Codex 按 `description` 匹配**按需加载**（不再常驻占 context）。
+  - 实测同时发现 Codex 会扫描 `.agents/skills` 与 `.codex/skills` 两处，两处都放会**重复加载**——故只铺 `.agents/skills`（标准推荐位）。
+  - `AGENTS.md` 的 kg 段瘦身为**一行指针**（指向 kg-consult skill）+ 一句兜底提醒（万一 skill 未加载时仍知道「图谱只走 kg MCP 工具、禁止直接改 graph.json」）。
+  - `templates/AGENTS.kg.md` 相应改为指针版；`install.py` 的 `deploy_cross_tool` 增加 Codex skill 部署（生成物，升级覆盖），`kg_admin update` 一并补齐。全部仍「合并/不覆盖 + 幂等」。
+
 ## 2.5.0 — 2026-07-24
 
 - **跨 AI 工具支持：Codex / Cursor 一并铺好 kg**（MINOR，向后兼容，纯新增，旧项目 `kg_admin update` 即可补齐）。此前 kg 的触发约定只以 Claude Code 私有的 skill / 斜杠命令形式存在，Codex 与 Cursor 都不解析这些格式——它们能用的是图谱真正工具无关的「网关」：**MCP**（三个工具都支持）。本版把「同一套 MCP + 同一套触发约定」铺到每个工具各自认的载体：

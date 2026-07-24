@@ -478,7 +478,7 @@ server 以启动时的 cwd 为项目根（`--root` 可覆盖），自动探测�
 | 工具 | MCP 配置 | 触发约定 | 强制防改图谱 |
 |---|---|---|---|
 | Claude Code | `.mcp.json` | `.claude/skills/`（自动激活） | ✅ PreToolUse hook |
-| Codex | `.codex/config.toml` | `AGENTS.md`（`templates/AGENTS.kg.md`，标记段合并） | ❌ 靠文字约定 |
+| Codex | `.codex/config.toml` | `.agents/skills/<name>/SKILL.md`（与 Claude 同源，按需加载）+ `AGENTS.md` 一行指针 | ❌ 靠文字约定 |
 | Cursor | `.cursor/mcp.json` | `.cursor/rules/kg.mdc`（`templates/cursor-kg.mdc`，`alwaysApply`） | ❌ 靠文字约定 |
 
 安装器写这些配置全部「合并/不覆盖 + 幂等」：已存在的 MCP server 一律跳过；`AGENTS.md` 用

@@ -270,7 +270,7 @@ Reloads graph files per call; external changes (git pull) need no restart.
 | Tool | MCP config | Trigger convention | Hard graph-edit block |
 |---|---|---|---|
 | Claude Code | `.mcp.json` | `.claude/skills/` (auto-activates) | ✅ PreToolUse hook |
-| Codex | `.codex/config.toml` | `AGENTS.md` (`templates/AGENTS.kg.md`, marked block merge) | ❌ textual convention only |
+| Codex | `.codex/config.toml` | `.agents/skills/<name>/SKILL.md` (same source as Claude, loaded on demand) + a one-line `AGENTS.md` pointer | ❌ textual convention only |
 | Cursor | `.cursor/mcp.json` | `.cursor/rules/kg.mdc` (`templates/cursor-kg.mdc`, `alwaysApply`) | ❌ textual convention only |
 
 The installer writes all of these with merge/never-overwrite + idempotency: existing MCP servers are skipped; `AGENTS.md` is managed as a `<!-- KG:BEGIN -->`/`<!-- KG:END -->` block (whole-block replace on re-run, user content outside untouched). TOML is emitted with a few lines of hand-rolled serialization (zero-dep, no TOML writer) and validated with `tomllib`. `kg_admin update` **backfills** too: existing projects get the Codex/Cursor config on upgrade, only what's missing.

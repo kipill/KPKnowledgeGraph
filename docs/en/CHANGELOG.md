@@ -6,6 +6,24 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.5.1 - 2026-07-24
+
+- **Codex trigger convention upgraded from `AGENTS.md` to an actual skill** (PATCH, follows 2.5.0).
+  Verified empirically against Codex CLI 0.144.6: Codex supports the `SKILL.md` open standard (the same
+  one as Claude Code), scanning repository-level skills in `.agents/skills/` from cwd up to the repo
+  root. So this release moves Codex's kg convention from an "always-on AGENTS.md block" to deploying
+  `.agents/skills/kg-consult/SKILL.md` + `.agents/skills/kg-view/SKILL.md` — **same source as Claude
+  Code's skills** (both from `skills/*.skill.md`), one body reused across tools, and Codex loads it
+  **on demand** by matching `description` (no longer resident in context).
+  - The same test revealed Codex scans both `.agents/skills` and `.codex/skills`, and placing a skill
+    in both causes **double loading** — so we deploy only to `.agents/skills` (the recommended location).
+  - The kg block in `AGENTS.md` is slimmed to a **one-line pointer** (to the kg-consult skill) plus a
+    fallback reminder (so that even if the skill fails to load, "graph writes go only through kg MCP
+    tools, never edit graph.json directly" is still stated).
+  - `templates/AGENTS.kg.md` becomes the pointer version accordingly; `install.py`'s `deploy_cross_tool`
+    adds Codex skill deployment (a generated artifact, overwritten on upgrade), and `kg_admin update`
+    backfills it. Everything remains "merge / never-overwrite + idempotent".
+
 ## 2.5.0 - 2026-07-24
 
 - **Cross–AI-tool support: kg now installs for Codex / Cursor too** (MINOR, backward compatible,

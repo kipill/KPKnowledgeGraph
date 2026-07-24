@@ -137,6 +137,15 @@ def deploy_cross_tool(target, dist_dir, kg_rel):
     register_mcp_cursor(target, kg_rel)
     register_mcp_codex(target, kg_rel)
     _merge_agents_md(target, dist_dir, kg_rel)
+    # Codex skill：.agents/skills/<name>/SKILL.md（Codex 认 SKILL.md 开放标准，按需自动加载）。
+    # 与 Claude Code 的 skill 同源（skills/*.skill.md），Codex 从 cwd 向上扫 .agents/skills 到 repo 根。
+    # 实测（Codex 0.144.6）：.agents/skills 与 .codex/skills 都会扫，两处都放会重复加载，只铺前者。
+    for skill_src in sorted((dist_dir / "skills").glob("*.skill.md")):
+        name = skill_src.name[: -len(".skill.md")]
+        skill_dst = target / ".agents" / "skills" / name / "SKILL.md"
+        skill_dst.parent.mkdir(parents=True, exist_ok=True)
+        _write_text(skill_dst, skill_src, kg_rel)
+        print("[部署] .agents/skills/%s/SKILL.md（Codex 触发约定）" % name)
     # Cursor 规则：.cursor/rules/kg.mdc（生成物，升级覆盖）
     rule_src = dist_dir / "templates" / "cursor-kg.mdc"
     if rule_src.exists():
@@ -358,7 +367,8 @@ def main():
     print("  4. 检查更新: python %s/tools/kg_admin.py check" % kg_rel)
     print()
     print("其它 AI 工具（同一套 MCP + 触发约定，已一并铺好）:")
-    print("  · Codex  : 重启后读 .codex/config.toml 载入 kg MCP；AGENTS.md 已含使用约定")
+    print("  · Codex  : 重启后读 .codex/config.toml 载入 kg MCP；")
+    print("             .agents/skills/kg-consult/SKILL.md（按需自动加载）+ AGENTS.md 指针")
     print("             （首次会提示信任本项目才加载项目级 MCP，按提示确认）")
     print("  · Cursor : 重启后读 .cursor/mcp.json 载入 kg MCP；.cursor/rules/kg.mdc 已含约定")
     print("  注意:Codex/Cursor 无 PreToolUse hook，防直接改图谱靠 AGENTS/rules 约定自律。")
