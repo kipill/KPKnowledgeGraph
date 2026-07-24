@@ -50,6 +50,35 @@ That's what KPKnowledgeGraph is after: **turning "human experience" into "the AI
 
 ---
 
+## Real-world usage data
+
+The following is actual usage data from **a real, medium-sized backend service project** (anonymized:
+project name removed, generic domain names like `billing` / `gateway` / `payment` kept). None of it is
+hand-authored — it's all recorded automatically by the tool's built-in dual logs (`querylog.jsonl` /
+`changelog.jsonl`) and reproducible with a single command. Full methodology and per-period raw data are
+in [`field-study/`](./field-study).
+
+**Cumulative data ~3 weeks after installing the graph:**
+
+| Metric | Value | Notes |
+|---|---|---|
+| Graph size | **30 entries / 7 domains** | billing / gateway / identity / ops / payment / platform / provider |
+| Queries | **22 queries · 89 hits** | ~4 relevant results per query — in the "enough without drowning" range |
+| Feedback accuracy | **91%** (10 accurate / 1 not) | 50% feedback rate (user-initiated; most projects are <30%) |
+| Entry coverage | **73%** (22 / 30 queried) | up steadily from 65% on install day |
+| Graph changes | **59** | relations/pitfalls keep being added — the graph grows, not abandoned after setup |
+
+**That one "inaccurate" is actually the highlight**: an entry's code path had gone stale after a
+refactor; the AI hit it during a query → flagged it inaccurate → corrected the path right there via the
+MCP tools. That's exactly the intended loop — **a query surfaces drift → feedback → self-heal** — rather
+than letting the graph quietly rot. So accuracy isn't "always 100%", it's "when it's wrong, it gets
+caught and fixed".
+
+> ⚠ This is a **single project, ~3 weeks, limited sample** observation — a real-usage reference, not a
+> statistical conclusion. We keep recording more periods (see field-study).
+
+---
+
 ## 30-second install
 
 > Requires Python 3. Run this from the **target project root**:
