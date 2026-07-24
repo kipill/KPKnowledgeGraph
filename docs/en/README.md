@@ -68,6 +68,12 @@ in [`field-study/`](./field-study).
 | Entry coverage | **73%** (22 / 30 queried) | up steadily from 65% on install day |
 | Graph changes | **59** | relations/pitfalls keep being added — the graph grows, not abandoned after setup |
 
+**Trends along the sampling timeline** (x-axis by real sampling date, spacing = actual interval — note the 17-day gap from 7-07 to 7-24; generated from the raw logs with a single command by [`field-study/gen_charts.py`](./field-study/gen_charts.py)):
+
+![Usage-intensity trend](./field-study/usage.svg)
+
+![Quality-metrics trend](./field-study/quality.svg)
+
 **That one "inaccurate" is actually the highlight**: an entry's code path had gone stale after a
 refactor; the AI hit it during a query → flagged it inaccurate → corrected the path right there via the
 MCP tools. That's exactly the intended loop — **a query surfaces drift → feedback → self-heal** — rather

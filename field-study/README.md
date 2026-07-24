@@ -85,4 +85,12 @@ print(json.dumps(kg.stats()['summary'], ensure_ascii=False, indent=2))
 - `README.md` —— 本规范（方法论）。
 - `snapshots.jsonl` —— 原始数据集（一行一期）。
 - `observations.md` —— 人类可读的汇总表 + 每期备注。
+- `gen_charts.py` —— 从 `snapshots.jsonl` 生成折线图（`usage.svg` 使用强度 + `quality.svg` 质量指标）。纯 stdlib、零依赖；**X 轴按真实采样日期**，间距即实际间隔，诚实反映采样节奏（非等距）。主 README 引用这两张图。
+- `usage.svg` / `quality.svg` —— 生成物。每加一期快照后重跑 `python gen_charts.py` 即更新。
 - `analysis.md` ——（积累若干期后补）跨期趋势分析与给开发者的结论。
+
+### 更新流程（加一期后）
+
+1. 追加一条到 `snapshots.jsonl` + 更新 `observations.md`（见上方规范）。
+2. `python gen_charts.py` 重生成两张 SVG。
+3. 若主 README 的汇总数字要跟着更新，一并改 `README.md` / `docs/en/README.md` 的实测数据表。
