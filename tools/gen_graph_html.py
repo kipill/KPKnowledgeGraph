@@ -37,8 +37,37 @@ PALETTE = [
 
 # ==================== 数据加载 ====================
 
-def load_data(kg_dir: Path, per_stats=None) -> dict:
+def _catalog_members_view(catalog_id, members, reuse_by_member):
+    """把能力目录成员 + 复用统计合并成前端视图。active 在前，deprecated 标注。"""
+    out = []
+    for m in members:
+        if not isinstance(m, dict):
+            continue
+        ev = m.get("enum_value", "")
+        rs = reuse_by_member.get((catalog_id, ev), {})
+        out.append({
+            "enum_value": ev,
+            "id": m.get("id"),
+            "name": m.get("name", ""),
+            "scenarios": m.get("scenarios", []) or [],
+            "reuse_note": m.get("reuse_note", ""),
+            "status": m.get("status", "active"),
+            "recommended": rs.get("recommended", 0),
+            "reused": rs.get("reused", 0),
+            "reuse_rate": rs.get("reuse_rate"),
+            "tier": rs.get("tier", "待验证"),
+        })
+    # active 在前，其余保持原序
+    out.sort(key=lambda x: x["status"] == "deprecated")
+    return out
+
+
+def load_data(kg_dir: Path, per_stats=None, reuse_stats=None) -> dict:
     per_stats = per_stats or {}
+    # reuse_stats: {"members": [{catalog_id, member, recommended, reused, reuse_rate, tier, ...}]}
+    reuse_by_member = {}
+    for m in (reuse_stats or {}).get("members", []):
+        reuse_by_member[(m.get("catalog_id"), m.get("member"))] = m
     main_graph = json.loads((kg_dir / "graph.json").read_text("utf-8"))
 
     nodes, edges, seen_edges = [], [], set()
@@ -58,12 +87,15 @@ def load_data(kg_dir: Path, per_stats=None) -> dict:
             if entry_id.startswith("_"):
                 continue
             domains_info[domain]["count"] += 1
-            nodes.append({
+            # 能力目录（经验层）：有 x_capability_members 扩展字段 → 特殊 type 供前端区分
+            cap_members = entry.get("x_capability_members")
+            is_catalog = isinstance(cap_members, list)
+            node = {
                 "id": entry_id,
                 "name_cn": entry.get("name_cn", entry_id),
                 "domain": domain,
                 "color": color,
-                "type": entry.get("type", "system"),
+                "type": "capability_catalog" if is_catalog else entry.get("type", "system"),
                 "summary": entry.get("summary", ""),
                 "pitfalls": entry.get("persistence_pitfalls", []),
                 "stats": {
@@ -74,7 +106,11 @@ def load_data(kg_dir: Path, per_stats=None) -> dict:
                     "changes": per_stats.get(entry_id, {}).get("changes", []),
                 },
                 "code": entry.get("code", {}),
-            })
+            }
+            if is_catalog:
+                node["members"] = _catalog_members_view(entry_id, cap_members, reuse_by_member)
+                node["source"] = entry.get("x_capability_source", {})
+            nodes.append(node)
 
             for rel in entry.get("related", []):
                 target = rel.get("to")
@@ -177,6 +213,20 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#0d1117;colo
 .pit{border-left:3px solid #da3633;padding:5px 8px;margin:3px 0;font-size:12px;line-height:1.4;background:#161b22;border-radius:0 4px 4px 0}
 .ci{font-size:11px;color:#58a6ff;padding:2px 0;font-family:monospace;word-break:break-all}
 .ci.sub{color:#8b949e}
+/* 能力目录成员卡片 */
+.mem{border:1px solid #21262d;border-radius:6px;padding:6px 8px;margin:4px 0;background:#0d1117}
+.mem.dep{opacity:.5}
+.mem-hd{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#c9d1d9}
+.mem-ev{font-family:monospace;color:#58a6ff}
+.mem-nm{color:#8b949e;font-weight:400}
+.mem-note{font-size:11px;color:#e3b341;line-height:1.4;margin:3px 0;padding:3px 6px;background:rgba(210,153,34,.08);border-radius:4px}
+.mem-scn{font-size:10px;color:#8b949e;margin-top:2px}
+.mem-scn span{display:inline-block;background:#21262d;padding:1px 6px;border-radius:8px;margin:1px 2px 1px 0}
+.badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:auto}
+.badge.t-待验证{background:#30363d;color:#8b949e}
+.badge.t-一般{background:rgba(88,166,255,.15);color:#58a6ff}
+.badge.t-高置信{background:rgba(46,160,67,.18);color:#3fb950}
+.mem-stat{font-size:10px;color:#8b949e;font-family:monospace;margin-top:2px}
 .hint{font-size:11px;color:#8b949e;line-height:1.5;margin-top:8px;padding:6px 8px;background:#0d1117;border-radius:6px;border:1px solid #21262d}
 /* 节点/边统一 tooltip */
 .kg-tooltip{position:fixed;z-index:1200;display:none;max-width:460px;min-width:180px;background:rgba(22,27,34,0.98);border:1px solid #30363d;border-radius:10px;padding:14px 16px;box-shadow:0 12px 32px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.2);pointer-events:none;font-size:14px;line-height:1.55;color:#c9d1d9;backdrop-filter:blur(4px)}
@@ -278,11 +328,11 @@ function render(D){
   if(cy){ cy.destroy(); cy=null; }
   nodeMap={};
   D.nodes.forEach(n=>nodeMap[n.id]=n);
-  const TYPE_SHAPE={system:'round-rectangle',module:'rectangle',service:'ellipse',api:'diamond',entity:'hexagon'};
-  const TYPE_LABEL={system:'系统',module:'模块',service:'服务',api:'接口',entity:'实体'};
+  const TYPE_SHAPE={system:'round-rectangle',module:'rectangle',service:'ellipse',api:'diamond',entity:'hexagon',capability_catalog:'diamond'};
+  const TYPE_LABEL={system:'系统',module:'模块',service:'服务',api:'接口',entity:'实体',capability_catalog:'能力目录'};
 
   const els=[];
-  D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,typeLabel:TYPE_LABEL[n.type]||n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats},position:{x:n.pos.x,y:n.pos.y}}));
+  D.nodes.forEach(n=>els.push({data:{id:n.id,label:n.name_cn,domain:n.domain,color:n.color,type:n.type,typeLabel:TYPE_LABEL[n.type]||n.type,summary:n.summary,pitfalls:n.pitfalls,code:n.code,stats:n.stats,members:n.members||null,source:n.source||null},position:{x:n.pos.x,y:n.pos.y}}));
   D.edges.forEach(e=>els.push({data:{id:e.id,source:e.source,target:e.target,context:e.context,confidence:e.confidence,ec:e.edgeColor,ls:e.lineStyle}}));
 
   cy=cytoscape({
@@ -304,6 +354,7 @@ function render(D){
       {selector:'node[type="service"]',style:{shape:'ellipse',width:132,height:46}},
       {selector:'node[type="api"]',style:{shape:'diamond',width:96,height:96,'font-size':'11px','text-max-width':'80px'}},
       {selector:'node[type="entity"]',style:{shape:'hexagon',width:112,height:44}},
+      {selector:'node[type="capability_catalog"]',style:{shape:'diamond',width:120,height:120,'font-size':'11px','text-max-width':'92px','border-width':2,'border-color':'#e3b341','border-opacity':.9}},
       {selector:'node:selected',style:{'border-width':3,'border-color':'#58a6ff'}},
       {selector:'node.faded',style:{opacity:.12}},
       {selector:'edge',style:{
@@ -414,6 +465,27 @@ function render(D){
           show.forEach(f=>{if(typeof f==='string')h+=`<div class="ci" title="${f}">○ ${f.split('/').pop()}</div>`;});
           if(v.length>4)h+=`<div class="ci sub">...共 ${v.length} 个</div>`;
         }
+      });
+    }
+    if(d.members&&d.members.length){
+      if(d.source&&d.source.symbol){
+        h+=`<div class="dsec">🔖 来源</div><div class="ci sub" title="${d.source.file||''}">${d.source.symbol} @ ${(d.source.file||'').split('/').pop()}</div>`;
+      }
+      h+=`<div class="dsec">🧩 能力成员（${d.members.length}）· 复用统计</div>`;
+      d.members.forEach(m=>{
+        const dep=m.status==='deprecated';
+        const rate=(m.reuse_rate===null||m.reuse_rate===undefined)?'—':Math.round(m.reuse_rate*100)+'%';
+        h+=`<div class="mem${dep?' dep':''}">`;
+        h+=`<div class="mem-hd"><span class="mem-ev">${m.enum_value}</span>`;
+        if(m.name)h+=`<span class="mem-nm">${m.name}</span>`;
+        if(dep)h+=`<span class="mem-nm">[废弃]</span>`;
+        h+=`<span class="badge t-${m.tier}">${m.tier}</span></div>`;
+        if(m.reuse_note)h+=`<div class="mem-note">⚠ ${m.reuse_note}</div>`;
+        if(m.scenarios&&m.scenarios.length){
+          h+=`<div class="mem-scn">`+m.scenarios.map(s=>`<span>${s}</span>`).join('')+`</div>`;
+        }
+        h+=`<div class="mem-stat">推荐 ${m.recommended||0} · 复用 ${m.reused||0} · 采纳率 ${rate}</div>`;
+        h+=`</div>`;
       });
     }
     const st=d.stats||{};
@@ -556,7 +628,7 @@ def gen_static(root: Path, kg_dir: Path, out_path: Path) -> int:
     kg = KG(root, kg_dir)
     stats = kg.stats()
     summary = stats["summary"]
-    data = load_data(kg.kg_dir, stats["per_entry"])
+    data = load_data(kg.kg_dir, stats["per_entry"], kg.get_reuse_stats())
     data["summary"] = summary
     nc, ec = len(data["nodes"]), len(data["edges"])
 
@@ -585,7 +657,7 @@ def build_page_html(root: Path, kg_dir: Path) -> str:
     kg = KG(root, kg_dir)
     stats = kg.stats()
     summary = stats["summary"]
-    data = load_data(kg.kg_dir, stats["per_entry"])
+    data = load_data(kg.kg_dir, stats["per_entry"], kg.get_reuse_stats())
     nc, ec = len(data["nodes"]), len(data["edges"])
     return _fill_placeholders(
         HTML_TEMPLATE,
@@ -648,7 +720,7 @@ class KGHandler(BaseHTTPRequestHandler):
             try:
                 kg = KG(self.server.root, self.server.kg_dir)
                 stats = kg.stats()
-                data = load_data(kg.kg_dir, stats["per_entry"])
+                data = load_data(kg.kg_dir, stats["per_entry"], kg.get_reuse_stats())
                 data["summary"] = stats["summary"]   # load_data 不含 summary，这里补
                 self._json(200, data)
             except KGError as e:

@@ -6,6 +6,77 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.5.0 - 2026-07-24
+
+- **Cross–AI-tool support: kg now installs for Codex / Cursor too** (MINOR, backward compatible,
+  pure addition; existing projects pick it up via `kg_admin update`). Until now kg's trigger
+  convention existed only as Claude Code's private skill / slash-command formats, which neither
+  Codex nor Cursor parse — but the graph's truly tool-agnostic "gateway" is **MCP**, which all three
+  tools support. This release lays down "the same MCP + the same trigger convention" in whatever
+  file each tool recognizes:
+  - **Codex**: `install.py` writes the `[mcp_servers.kg]` table into project-level
+    `.codex/config.toml`; the trigger convention is merged into the project-root `AGENTS.md` (Codex
+    reads it every session). The TOML is emitted with a few lines of hand-rolled serialization — no
+    third-party TOML writer (keeps the zero-dependency rule); the result is validated with `tomllib`.
+    Codex prompts for project trust before loading project-level MCP the first time — this release
+    does **not** write `trust_level` for you (its semantics vary by version/global config, so writing
+    it blindly is harmful); instead the installer prints a note to confirm trust when Codex asks.
+  - **Cursor**: writes project-level `.cursor/mcp.json` (same `mcpServers.kg` shape as `.mcp.json`);
+    the trigger convention deploys to `.cursor/rules/kg.mdc` (`alwaysApply: true`, auto-injected by
+    Cursor).
+  - Single-source trigger convention: adds `templates/AGENTS.kg.md` and `templates/cursor-kg.mdc`, a
+    condensed version of the `kg-consult` skill (when to consult the graph first, how to query, writes
+    go only through MCP, `kg_feedback` after a task) — three carriers, one source.
+  - Everything is "merge / never-overwrite + idempotent": an existing MCP server is always skipped
+    (never overwrites your config or your other servers); `AGENTS.md` is managed as a marked block
+    (`<!-- KG:BEGIN -->` / `<!-- KG:END -->`), replaced as a whole on re-run rather than appended
+    again, leaving your content outside the markers untouched.
+  - `kg_admin update` (`install.py --refresh-tools`) **backfills** too: existing projects get the
+    Codex/Cursor config on upgrade, but again only what's missing — it touches no existing config,
+    consistent with the original "update never overwrites user config" contract, just widened to
+    "fill in the gaps".
+- ⚠ **Known asymmetry**: Codex/Cursor have no PreToolUse hook like Claude Code's, so direct edits to
+  `graph*.json` cannot be hard-blocked there — "don't edit the graph directly" rests only on the
+  textual convention in `AGENTS.md` / cursor rules (written as an explicit warning in the generated
+  files). The hard guarantee of graph consistency still holds only under Claude Code + the hook.
+
+## 2.4.0 - 2026-07-10
+
+- **Added the "capability catalog + reuse recommendation" experience layer** (MINOR, backward
+  compatible, no migration needed for existing graphs). It solves a request-triage problem:
+  requesters phrase requests as a **description** (e.g. "send the user a notification after they place
+  an order"), and without digging in these tend to be built as new features — when an existing configurable
+  capability (an enum member) would do the job with a bit of configuration. Adds 4 MCP tools:
+  - `kg_add_capability_catalog`: catalog a "capability catalog" — an enum/constant family of a
+    configurable behavior (members are behavior variants, consumed by switch/config tables, and
+    requesters describe rather than name them). Carried as a `type=concept` entry plus an
+    `x_capability_members` extension field. Fact fields are organized by the LLM reading the source;
+    semantic fields (scenarios/reuse_note) are drafted and then written after the user confirms
+    (human-in-the-loop on the write side).
+  - `kg_add_capability_members`: append/update members on an existing capability catalog (merge
+    semantics: an existing enum_value is overwritten, a new one is appended). Used to catalog large
+    enums in batches (tens to hundreds of members) or to refine scenarios/reuse_note later; returns
+    updated/added counts.
+  - `kg_scout_reuse`: the reuse-recommendation triage gate. Query this first when a request would
+    build a new capability; the tool does a keyword **coarse ranking** over name/scenarios/reuse_note
+    and returns the top-5 relevant members; the LLM does the **fine ranking** (reads reuse_note to
+    judge whether the request carries qualifiers beyond the capability's semantics, and grades
+    recommend/reference), relays it to the user with options, and waits for the human to decide. It
+    deliberately does not return a copy-pasteable config string, forcing human confirmation.
+  - `kg_report_reuse_outcome`: write the recommendation outcome (reuse/new/misunderstood) back to
+    `reuse_feedback.jsonl` (telemetry).
+  - `kg_get_reuse_stats`: aggregate feedback, counting recommendations/adoptions/adoption rate per
+    member, graded by threshold (<3 = unverified / ≥10 and adoption rate >70% = trusted).
+- The `kg-consult` skill gains a "reuse recommendation (triage gate)" step, placed ahead of the fact
+  query.
+- `validate.py` / `kg_validate` gains capability-catalog structure validation (enum_value required
+  and deduplicated, status legal, warning when scenarios are missing; no source cross-check).
+- **Visualization (kg-view) extended**: a capability catalog renders as a gold-bordered diamond node;
+  clicking it shows a member list in the detail panel — each member carries reuse-stat badges
+  (recommended/reused/adoption rate + grade: unverified/normal/trusted), deprecated members are
+  pinned to the bottom with a marker, and the source enum is attached. Supported in both static
+  export and the live server.
+
 ## 2.3.5 - 2026-07-04
 
 - Fixed `kg_guard_hook` crashing under subdirectories. The hook was registered with a **relative**

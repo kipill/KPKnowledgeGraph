@@ -56,6 +56,98 @@ def read_version(dist_dir):
     return v.read_text(encoding="utf-8").strip() if v.exists() else "未知"
 
 
+# ==================== 跨工具入口（Codex / Cursor） ====================
+#
+# 图谱的「网关」是 MCP，本身工具无关：Claude Code / Codex / Cursor 都支持 MCP。
+# 三者差异只在「配置文件位置/格式」和「触发约定的载体」：
+#   Claude Code : .mcp.json(既有)            + .claude/skills(skill 自动激活)
+#   Codex       : .codex/config.toml(TOML)   + AGENTS.md(每会话自动读)
+#   Cursor      : .cursor/mcp.json(JSON)     + .cursor/rules/*.mdc(自动注入)
+# MCP 调用命令三者完全一致：python -X utf8 <kg_rel>/tools/kg_mcp_server.py
+# 全部「合并/不覆盖」语义，绝不动用户已有的其它 server / rule。
+
+def register_mcp_cursor(target, kg_rel):
+    """Cursor 项目级 MCP：.cursor/mcp.json，结构与 .mcp.json 相同（mcpServers.kg）。"""
+    path = target / ".cursor" / "mcp.json"
+    conf = read_json(path, {})
+    servers = conf.setdefault("mcpServers", {})
+    if "kg" in servers:
+        print("[跳过] .cursor/mcp.json 已有 kg server（不覆盖）")
+        return
+    servers["kg"] = {"command": "python",
+                     "args": ["-X", "utf8", "%s/tools/kg_mcp_server.py" % kg_rel]}
+    write_json(path, conf)
+    print("[注册] .cursor/mcp.json → kg MCP server（Cursor）")
+
+
+def register_mcp_codex(target, kg_rel):
+    """Codex 项目级 MCP：.codex/config.toml 追加 [mcp_servers.kg] 表。
+    幂等靠文本标记检测（不引入 TOML 写库，守零依赖）。trust 交给 Codex 首次提示，
+    不代写 trust_level（其 semantics 因版本/全局配置而异，误写反而有害）。"""
+    path = target / ".codex" / "config.toml"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if "[mcp_servers.kg]" in existing:
+        print("[跳过] .codex/config.toml 已有 [mcp_servers.kg]（不覆盖）")
+        return
+    block = (
+        "\n[mcp_servers.kg]\n"
+        'command = "python"\n'
+        'args = ["-X", "utf8", "%s/tools/kg_mcp_server.py"]\n' % kg_rel
+    )
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(existing + block, encoding="utf-8")
+    print("[注册] .codex/config.toml → [mcp_servers.kg]（Codex）")
+    print("       ⚠ Codex 首次在本项目会提示信任(trust)才加载项目级 MCP，按提示确认即可。")
+
+
+def _merge_agents_md(target, dist_dir, kg_rel):
+    """把 templates/AGENTS.kg.md 合并进项目根 AGENTS.md（Codex 触发约定载体）。
+    用 <!-- KG:BEGIN --> / <!-- KG:END --> 标记整段管理：已存在则整段替换（升级），
+    不存在则追加到文件末尾；无 AGENTS.md 则新建。绝不动标记外的用户内容。"""
+    src = dist_dir / "templates" / "AGENTS.kg.md"
+    if not src.exists():
+        return
+    section = src.read_text(encoding="utf-8").replace(".claude/kg", kg_rel).rstrip() + "\n"
+    path = target / "AGENTS.md"
+    begin, end = "<!-- KG:BEGIN", "<!-- KG:END -->"
+    if not path.exists():
+        path.write_text(section, encoding="utf-8")
+        print("[创建] AGENTS.md（kg 触发约定，Codex 用）")
+        return
+    cur = path.read_text(encoding="utf-8")
+    if begin in cur and end in cur:
+        head = cur[: cur.index(begin)]
+        tail = cur[cur.index(end) + len(end):]
+        path.write_text(head + section.rstrip("\n") + tail, encoding="utf-8")
+        print("[更新] AGENTS.md → kg 约定段（整段替换）")
+    else:
+        sep = "" if cur.endswith("\n\n") else ("\n" if cur.endswith("\n") else "\n\n")
+        path.write_text(cur + sep + section, encoding="utf-8")
+        print("[追加] AGENTS.md → kg 触发约定段（保留原有内容）")
+
+
+def deploy_cross_tool(target, dist_dir, kg_rel):
+    """铺跨工具入口：Codex/Cursor 的 MCP 配置 + 触发约定文件。
+    全部「合并/不覆盖 + 幂等」：MCP 配置已存在则跳过（绝不覆盖用户配置），
+    触发约定文件（AGENTS.md 段 / cursor rules）是生成物，按标记整段替换/覆盖。
+    因此首次安装与 kg_admin update「补缺失」共用同一逻辑——update 调用时只会
+    补上尚不存在的配置，不动任何已有项。"""
+    register_mcp_cursor(target, kg_rel)
+    register_mcp_codex(target, kg_rel)
+    _merge_agents_md(target, dist_dir, kg_rel)
+    # Cursor 规则：.cursor/rules/kg.mdc（生成物，升级覆盖）
+    rule_src = dist_dir / "templates" / "cursor-kg.mdc"
+    if rule_src.exists():
+        rule_dst = target / ".cursor" / "rules" / "kg.mdc"
+        rule_dst.parent.mkdir(parents=True, exist_ok=True)
+        rule_dst.write_text(
+            rule_src.read_text(encoding="utf-8").replace(".claude/kg", kg_rel),
+            encoding="utf-8")
+        print("[部署] .cursor/rules/kg.mdc（Cursor 触发约定）")
+
+
 def _write_text(dst, src, kg_rel):
     dst.write_text(src.read_text(encoding="utf-8").replace(".claude/kg", kg_rel), encoding="utf-8")
 
@@ -189,10 +281,13 @@ def main():
             sys.exit(1)
         print("升级工具层: %s" % target)
         deploy_tools(DIST, target, kg_rel, overwrite_skill_cmd=True)
+        # 补齐跨工具入口（Codex/Cursor）：只补缺失，已有配置一律跳过、绝不覆盖
+        deploy_cross_tool(target, DIST, kg_rel)
         print()
         print("工具层已更新到 %s" % read_version(DIST))
-        print("未改动：graph*.json / entries/ / 日志 / .mcp.json / settings.json")
-        print("重启 Claude Code 会话使新工具生效。")
+        print("未改动：graph*.json / entries/ / 日志 / .mcp.json / settings.json"
+              " / 已存在的 .codex、.cursor MCP 配置")
+        print("重启会话使新工具生效（Claude / Codex / Cursor）。")
         return
 
     # ---- 首次安装 ----
@@ -240,6 +335,9 @@ def main():
     else:
         print("[跳过] settings.json 已有 kg_guard_hook（已是最新形式）")
 
+    # 跨工具入口：Codex（.codex/config.toml + AGENTS.md）+ Cursor（.cursor/mcp.json + rules）
+    deploy_cross_tool(target, DIST, kg_rel)
+
     # 记录发行仓库地址（供 kg_admin update）
     repo = args.repo or os.environ.get("KG_DIST_REPO")
     if repo:
@@ -258,6 +356,12 @@ def main():
     print("  2. 新项目跑 /kg-init 初始化图谱骨架")
     print("  3. 校验:  python %s/tools/validate.py" % kg_rel)
     print("  4. 检查更新: python %s/tools/kg_admin.py check" % kg_rel)
+    print()
+    print("其它 AI 工具（同一套 MCP + 触发约定，已一并铺好）:")
+    print("  · Codex  : 重启后读 .codex/config.toml 载入 kg MCP；AGENTS.md 已含使用约定")
+    print("             （首次会提示信任本项目才加载项目级 MCP，按提示确认）")
+    print("  · Cursor : 重启后读 .cursor/mcp.json 载入 kg MCP；.cursor/rules/kg.mdc 已含约定")
+    print("  注意:Codex/Cursor 无 PreToolUse hook，防直接改图谱靠 AGENTS/rules 约定自律。")
 
 
 if __name__ == "__main__":
