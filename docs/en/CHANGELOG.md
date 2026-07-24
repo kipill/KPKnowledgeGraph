@@ -6,6 +6,26 @@ This file records version changes to the KPKnowledgeGraph distribution. Versions
 (MAJOR.MINOR.PATCH). Users check for updates with `python .claude/kg/tools/kg_admin.py check` and
 upgrade with `update`.
 
+## 2.6.0 - 2026-07-24
+
+- **kg-init rounded out into a cross-tool skill** (MINOR, backward compatible). Previously the
+  `kg-init` graph-bootstrap flow existed only as Claude Code's private slash command
+  (`.claude/commands/kg-init.md`), leaving Codex/Cursor users with no initialization entry point.
+  This release turns the full flow into a skill:
+  - Adds `skills/kg-init.skill.md` as the **single source** for the flow; the installer deploys it to
+    both `.claude/skills/kg-init/SKILL.md` (Claude) and `.agents/skills/kg-init/SKILL.md`
+    (Codex/Cursor), via the same deployment logic as kg-consult/kg-view.
+  - Claude's slash command `kg-init.md` is slimmed to a **thin shell pointing at the skill** (keeping
+    `$ARGUMENTS` passthrough), eliminating duplicate maintenance — `/kg-init` still works, but the flow
+    is defined in exactly one place.
+  - The `description` is written **narrowly**: it triggers only when the user explicitly asks to
+    "initialize the knowledge graph / kg-init / build the graph", or when graph.json is still an empty
+    main index; it does not trigger during everyday query/coding (that's kg-consult) or once the graph
+    is built. Because kg-init is a one-shot heavy operation (creates many files, includes two user Gate
+    confirmations), this avoids accidental triggering from a broad description match.
+  - Verified on Codex CLI 0.144.6 that the skill loads correctly and Codex understood the "only on
+    explicit request" boundary.
+
 ## 2.5.1 - 2026-07-24
 
 - **Codex trigger convention upgraded from `AGENTS.md` to an actual skill** (PATCH, follows 2.5.0).

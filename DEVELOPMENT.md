@@ -34,9 +34,11 @@
 │   │       ├── build_reverse_index.py   # 手动重建反向索引（人工直改后用）
 │   │       └── gen_graph_html.py        # 生成可视化 HTML
 │   ├── skills/
-│   │   └── kg-consult/SKILL.md          # Claude skill（决定 AI 何时自动查图谱）
+│   │   ├── kg-consult/SKILL.md          # 决定 AI 何时自动查图谱
+│   │   ├── kg-view/SKILL.md             # 可视化查看
+│   │   └── kg-init/SKILL.md             # 生成骨架（仅显式请求时触发）
 │   └── commands/
-│       └── kg-init.md                   # /kg-init 命令（AI 生成骨架）
+│       └── kg-init.md                   # /kg-init 斜杠命令（薄壳，指向 kg-init skill）
 └── ...项目代码...
 ```
 

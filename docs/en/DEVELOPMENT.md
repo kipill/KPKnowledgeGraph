@@ -33,8 +33,8 @@ After install (install.sh / install.ps1 / python install.py), the target project
 │   │       ├── validate.py              # validate CLI (CI / pre-commit / human)
 │   │       ├── build_reverse_index.py   # manual reverse-index rebuild (after manual direct edits)
 │   │       └── gen_graph_html.py        # generate visualization HTML
-│   ├── skills/kg-consult/SKILL.md       # Claude skill (decides when AI auto-checks the graph)
-│   └── commands/kg-init.md              # /kg-init command
+│   ├── skills/kg-consult|kg-view|kg-init/SKILL.md  # skills (consult / view / init)
+│   └── commands/kg-init.md              # /kg-init slash command (thin shell → kg-init skill)
 └── ...project code...
 ```
 

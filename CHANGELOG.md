@@ -5,6 +5,14 @@
 本文件记录知识图谱发行包（dist）的版本变更。版本号遵循语义化版本（MAJOR.MINOR.PATCH）。
 使用者用 `python .claude/kg/tools/kg_admin.py check` 检查更新，`update` 升级。
 
+## 2.6.0 — 2026-07-24
+
+- **kg-init 补齐为跨工具 skill**（MINOR，向后兼容）。此前初始化图谱骨架的 `kg-init` 只以 Claude Code 私有的斜杠命令（`.claude/commands/kg-init.md`）形式存在，Codex/Cursor 用户没有初始化入口。本版把完整流程做成 skill：
+  - 新增 `skills/kg-init.skill.md` 作为流程**唯一源**，安装器一并铺到 `.claude/skills/kg-init/SKILL.md`（Claude）与 `.agents/skills/kg-init/SKILL.md`（Codex/Cursor），与 kg-consult/kg-view 走同一套部署逻辑。
+  - Claude 的斜杠命令 `kg-init.md` 瘦身为**薄壳指向 skill**（保留 `$ARGUMENTS` 参数传递），消除重复维护——`/kg-init` 仍可用，流程定义只此一份。
+  - `description` **写严**：仅在用户明确要求「初始化知识图谱 / kg-init / 建图谱」或 graph.json 仍是空主索引时触发；日常查询改代码（那是 kg-consult）或图谱已建好时不触发。因为 kg-init 是一次性重操作（创建大量文件、含两道 Gate 用户确认），避免被 description 宽匹配误触发。
+  - 本机 Codex 0.144.6 实测确认 skill 正确加载、且 Codex 读懂了「仅显式请求时触发」的边界约束。
+
 ## 2.5.1 — 2026-07-24
 
 - **Codex 触发约定从 `AGENTS.md` 升级为真正的 skill**（PATCH，接续 2.5.0）。经在 Codex CLI 0.144.6 实测确认：Codex 支持 `SKILL.md` 开放标准（与 Claude Code 同一套），仓库级 skill 从 cwd 向上扫描 `.agents/skills/` 到 repo 根。因此本版把 Codex 的 kg 使用约定从「AGENTS.md 常驻段」改为部署 `.agents/skills/kg-consult/SKILL.md` + `.agents/skills/kg-view/SKILL.md`——**与 Claude Code 的 skill 同源**（都来自 `skills/*.skill.md`），一份内容多工具复用，且 Codex 按 `description` 匹配**按需加载**（不再常驻占 context）。
